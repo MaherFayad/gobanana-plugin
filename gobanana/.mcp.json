@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "gobanana": {
+      "type": "http",
+      "url": "https://gobanana.fun/api/mcp"
+    }
+  }
+}
