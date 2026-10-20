@@ -8,7 +8,7 @@ Ask your agent to "go wild" on a page. GoBanana bends the brief into unexpected 
 
 The plugin connects your agent to the GoBanana MCP server and adds 12 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
 
-> Status: v0.2.0, beta. The server runs at `https://gobanana.fun`.
+> Status: v0.2.1, beta. The server runs at `https://gobanana.fun`.
 
 ## Install
 
@@ -32,7 +32,7 @@ Add the plugin from your organization's plugin settings or from Anthropic's dire
 1. **One short intake.** The agent reads `design/gobanana/CONTEXT.md` and asks only what is missing, in one stop: how far to go (Explore, Explore then draft, Finished, Just references), your style words ranked, who it is for and the market, and the business goal with its number. The answers are saved to `design/gobanana/CONTEXT.md` and reused next time. Say "just go" and it fills the gaps itself and tells you what it assumed. If you name the whole product, the same stop asks "Where should the weirdness go?" ([Where weirdness pays](https://gobanana.fun/docs/guides/where-weirdness-pays/)).
 2. **Sweep and name the rut.** One wide search maps what the category already does, so no direction lands in it.
 3. **Bend, craft first.** The agent writes 7 to 10 ideas grounded in real culture (patterns, cloth, street signage, ancient artifacts); the server bends the strongest into 4 deep directions. Each is one working mechanic (the total, the progress bar, the queue) plus one signature element; the look comes from your taste. One is the subtract direction: the same job with less.
-4. **See every result.** The agent looks at every reference image before it keeps one, keeps 10 to 15 per direction with a "steal:" note, and marks 2 to 3 per direction as the craft target the build must match.
+4. **See every result.** The agent looks at every reference image before it keeps one, keeps 8 to 12 per direction with a "steal:" note, and marks 2 to 3 per direction as the craft target the build must match.
 5. **Shipped vs next.** If you have a Mobbin connector, real shipped screens that fit each direction go on the board with a "Shipped today" note. The board shows them straight from Mobbin; nothing is downloaded.
 6. **Board.** A Space section (what the category does) and one section per direction, clustered by what to take (layout, components, type, color, motion, art), each tile with its source link.
 7. **Draft or build.** Draft a pick into one checked screen (gobanana-draft), or have the agent research, spec and build the feature properly in Claude Code (gobanana-finish).

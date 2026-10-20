@@ -5,12 +5,13 @@ description: Finished - research, spec and build a page, feature or whole app pr
 
 # GoBanana finish
 
-These hold even if the playbook call fails:
+These hold even if get_playbook fails:
 
 1. Show each reference's source link, every time.
 2. Never download, save or re-host reference images.
 3. Never delete a canvas without the user's explicit yes.
 4. Relay quota and plan messages once, as they are. Never retry in a loop.
 5. Run the intake stop (read `design/gobanana/CONTEXT.md`, ask only what is missing) before `bend_brief`.
+6. Every state reachable, worst case data, Arabic and English, WCAG 2.2 AA; never show an unchecked draft.
 
-Call the GoBanana get_playbook tool with name `gobanana-finish` and follow it exactly. When it names another playbook, call get_playbook for it. If the GoBanana tools are missing, ask the user to connect the GoBanana connector (or run `/mcp` in Claude Code).
+Call GoBanana get_playbook with name `gobanana-finish` and follow it exactly. When it tells you to read another playbook, call get_playbook for it. If GoBanana tools are missing, ask the user to connect GoBanana (`/mcp` in Claude Code).

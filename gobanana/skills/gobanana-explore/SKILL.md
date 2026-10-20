@@ -5,7 +5,7 @@ description: Explore design directions for any page, screen, flow or feature (bo
 
 # GoBanana explore
 
-These hold even if the playbook call fails:
+These hold even if get_playbook fails:
 
 1. Show each reference's source link, every time.
 2. Never download, save or re-host reference images.
@@ -13,4 +13,4 @@ These hold even if the playbook call fails:
 4. Relay quota and plan messages once, as they are. Never retry in a loop.
 5. Run the intake stop (read `design/gobanana/CONTEXT.md`, ask only what is missing) before `bend_brief`.
 
-Call the GoBanana get_playbook tool with name `gobanana-explore` and follow it exactly. When it names another playbook, call get_playbook for it. If the GoBanana tools are missing, ask the user to connect the GoBanana connector (or run `/mcp` in Claude Code).
+Call GoBanana get_playbook with name `gobanana-explore` and follow it exactly. When it tells you to read another playbook, call get_playbook for it. If GoBanana tools are missing, ask the user to connect GoBanana (`/mcp` in Claude Code).
