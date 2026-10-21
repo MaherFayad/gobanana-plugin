@@ -5,6 +5,8 @@ description: Finished - research, spec and build a page, feature or whole app pr
 
 # GoBanana finish
 
+Plugin 0.4.0. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.4.0, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+
 These hold even if get_playbook fails:
 
 1. Show each reference's source link, every time.
@@ -13,5 +15,6 @@ These hold even if get_playbook fails:
 4. Relay quota and plan messages once, as they are. Never retry in a loop.
 5. Run the intake stop (read `design/gobanana/CONTEXT.md`, ask only what is missing) before `bend_brief`.
 6. Every state reachable, worst case data, Arabic and English, WCAG 2.2 AA; never show an unchecked draft.
+7. Directions differ in structure; taste only as given or confirmed. End with the canvas web link.
 
-Call GoBanana get_playbook with name `gobanana-finish` and follow it exactly. When it tells you to read another playbook, call get_playbook for it. If GoBanana tools are missing, ask the user to connect GoBanana (`/mcp` in Claude Code).
+Call get_playbook with name `gobanana-finish` and follow it exactly; batch the playbooks it names in `more`.

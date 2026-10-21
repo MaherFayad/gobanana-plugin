@@ -2,13 +2,13 @@
 
 **Mobbin shows what works. GoBanana shows what's next.**
 
-GoBanana is a Claude plugin for one crazy idea over a page or two: a launch page, onboarding, an empty state, a 404, a paywall, a year in review. It is not for your product's main design direction. Your product keeps its design system; the wild page inherits it and overrides only what the idea needs.
+GoBanana is a Claude plugin for one crazy idea over a page or two: a launch page, onboarding, an empty state, a 404, a paywall, a year in review, a checkout, a dashboard, a canvas or editor tool, a game screen, a slide, an email or a poster. It is not for your product's main design direction. Your product keeps its design system; the wild page inherits it and overrides only what the idea needs.
 
 Ask your agent to "go wild" on a page. GoBanana bends the brief into unexpected directions, each with a full visual spec, fills a moodboard canvas with two zones of linked references (the wild idea as images, and real UI for your platform), and hands the direction you keep to Claude Code, Cursor, Copilot, Codex, v0 or Lovable as scoped files. Then it can screenshot what you built and grade it against the direction.
 
 The plugin connects your agent to the GoBanana MCP server and adds 12 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
 
-> Status: v0.2.1, beta. The server runs at `https://gobanana.fun`.
+> Status: v0.4.0, beta. The server runs at `https://gobanana.fun`.
 
 ## Install
 
@@ -25,26 +25,40 @@ Then run `/mcp`, pick `plugin:gobanana:gobanana`, and log in. GoBanana uses OAut
 
 ### claude.ai and Cowork
 
-Add the plugin from your organization's plugin settings or from Anthropic's directory once it is listed. The GoBanana server shows up as a connector; connect it and log in.
+Add the plugin from your organization's plugin settings or from Anthropic's directory once it is listed, and connect the GoBanana connector (claude.ai settings, Connectors) and log in.
+
+### Connector or plugin server
+
+The plugin brings its own server entry (`.mcp.json`, `https://gobanana.fun/api/mcp`, OAuth) so Claude Code works out of the box. On claude.ai the GoBanana connector gives the same tools under another name (`mcp__GoBanana__*` instead of `mcp__plugin_gobanana_gobanana__*`).
+
+- If the claude.ai GoBanana connector is connected, use it. Every skill, subagent and hook works with whichever GoBanana tools are there, under any prefix.
+- In a claude.ai cloud session the plugin's own server may show "requires authentication": that session can not run the OAuth login. This is expected and harmless while the connector is connected.
+- With no GoBanana tools at all, the skills tell you to connect the GoBanana connector at claude.ai or run `/mcp` in Claude Code.
+
+### Keeping the claude.ai copy current
+
+claude.ai serves its own copy of an organization plugin; it does not follow this repo by itself. After each GoBanana release, an org admin must re-sync the GoBanana plugin in the organization's plugin settings on claude.ai, or cloud sessions keep running the old skills. In Claude Code, run `/plugin update gobanana`.
+
+You can tell when a copy is behind: every skill calls the GoBanana `ping` tool once, and when the server's `minPlugin` is newer than the plugin's version, the agent tells you in one line to update.
 
 ## The flow
 
-1. **One short intake.** The agent reads `design/gobanana/CONTEXT.md` and asks only what is missing, in one stop: how far to go (Explore, Explore then draft, Finished, Just references), your style words ranked, who it is for and the market, and the business goal with its number. The answers are saved to `design/gobanana/CONTEXT.md` and reused next time. Say "just go" and it fills the gaps itself and tells you what it assumed. If you name the whole product, the same stop asks "Where should the weirdness go?" ([Where weirdness pays](https://gobanana.fun/docs/guides/where-weirdness-pays/)).
+1. **One short intake.** The agent reads `design/gobanana/CONTEXT.md` and asks only what is missing, in one stop: how far to go (Explore, Explore then draft, Finished, Just references), your style words ranked, who it is for and the market, and the business goal with its number. The answers are saved to `design/gobanana/CONTEXT.md` and reused next time. Say "just go" and it fills the gaps itself and tells you what it assumed. If it is unclear what to design, the same stop asks once (or, under "just go", says which reading it took). If you name the whole product, it asks "Where should the weirdness go?" ([Where weirdness pays](https://gobanana.fun/docs/guides/where-weirdness-pays/)).
 2. **Sweep and name the rut.** One wide search maps what the category already does, so no direction lands in it.
-3. **Bend, craft first.** The agent writes 7 to 10 ideas grounded in real culture (patterns, cloth, street signage, ancient artifacts); the server bends the strongest into 4 deep directions. Each is one working mechanic (the total, the progress bar, the queue) plus one signature element; the look comes from your taste. One is the subtract direction: the same job with less.
+3. **Bend, structure first.** The agent writes 7 to 10 fresh ideas grounded in real culture, never one used on your recent boards; the server bends the strongest into 4 directions (or the number you ask for, up to 8). They differ in structure: layout skeleton, navigation and spatial model, not only ornament. Each has a working mechanic, and from wildness 3 up the idea can own the page layout. The look comes from the taste you gave or confirmed, never a hidden default. One is the subtract direction: the same job with less.
 4. **See every result.** The agent looks at every reference image before it keeps one, keeps 8 to 12 per direction with a "steal:" note, and marks 2 to 3 per direction as the craft target the build must match.
 5. **Shipped vs next.** If you have a Mobbin connector, real shipped screens that fit each direction go on the board with a "Shipped today" note. The board shows them straight from Mobbin; nothing is downloaded.
 6. **Board.** A Space section (what the category does) and one section per direction, clustered by what to take (layout, components, type, color, motion, art), each tile with its source link.
-7. **Draft or build.** Draft a pick into one checked screen (gobanana-draft), or have the agent research, spec and build the feature properly in Claude Code (gobanana-finish).
+7. **Draft or build.** Draft a pick into one checked screen (gobanana-draft), placed on the board beside its direction, or have the agent research, spec and build the feature properly in Claude Code (gobanana-finish). Every run ends with the canvas link; the HTML is in addition to the board, not instead of it.
 8. **Hand off.** Scoped files for your coding tools, under `design/explorations/<slug>/` ([Hand off](https://gobanana.fun/docs/guides/handoff/)). Frankenstein it, palette and critique are there when you want them.
 
 ## Skills
 
 | Skill | Say something like | What happens |
 | --- | --- | --- |
-| `gobanana-explore` | "go wild on our launch page", "crazy ideas for onboarding", "help me design the checkout" | One intake stop saved to CONTEXT.md, a sweep that names the rut, grounded ideas bent into 4 deep directions (mechanic plus one signature element), every reference seen before it is kept, 2 to 3 craft targets per direction, Mobbin screens when connected, a clustered board and compact cards |
+| `gobanana-explore` | "go wild on our launch page", "crazy ideas for onboarding", "help me design the checkout" | One intake stop saved to CONTEXT.md, a sweep that names the rut, fresh grounded ideas bent into 4 directions (or your count) that differ in structure, every reference seen before it is kept, 2 to 3 craft targets per direction, Mobbin screens when connected, a clustered board and compact cards |
 | `gobanana-finish` | "build it properly", "end to end", "production ready" | The intake, then problem, space, spec and wireframes for your OK, 4 directions to pick, one screen first for your reaction, then the code, reviewed against the craft references |
-| `gobanana-draft` | "draft these", "draft my pick" | One checked screen per pick, built to the direction's craft references, rendered and graded before you see it |
+| `gobanana-draft` | "draft these", "draft my pick" | One checked screen per pick, built to the direction's craft references, rendered and graded before you see it, then placed on the board beside its direction |
 | `gobanana-moodboard` | "make a moodboard", "arrange this", "put it in FigJam" | Sections per direction, art row above UI grid, steal notes, clean layout; optionally FigJam or an HTML board |
 | `gobanana-palette` | "palette", "colors from the art direction" | Extracts colors with roles and tags each pair `ship` or `explore` by WCAG 2.2 contrast |
 | `gobanana-design-md` | "DESIGN.md for this page" | Scoped DESIGN.md under `design/explorations/<slug>/`, linted with `@google/design.md` |
@@ -62,7 +76,8 @@ Add the plugin from your organization's plugin settings or from Anthropic's dire
 | `mobile` | App screens and mobile galleries; web titles dropped | 4 columns, 16px margins, 44pt targets, tab bar and bottom sheet | 390x844 |
 | `tablet` | Tablet and app screens | Split views, larger targets | 834x1194 |
 | `website` | Landing pages, heroes, sites; website galleries | 12 columns, fluid type with clamp | 1440x900 and 390x844 |
-| `webapp` | Dashboards and web apps; mobile only titles dropped | 12 columns or sidebar shell, dense 8px rhythm, tables, keyboard | 1440x900 |
+| `webapp` | Web apps; dashboards only for real dashboards; mobile only titles dropped | 12 columns, or a sidebar shell for real dashboards; 8px rhythm, keyboard | 1440x900 |
+| canvas pages (any platform) | Canvas, whiteboard, moodboard and editor tools | Full bleed canvas with a slim tool rail, floating inspector, zoom and minimap; keyboard for every drag | The platform's sizes |
 
 ### Wildness
 
@@ -74,10 +89,13 @@ Add the plugin from your organization's plugin settings or from Anthropic's dire
 | 4 | Wild | Two or three moves |
 | 5 | Bananas | Three moves, usability ignored on purpose |
 
+From 3 up, a direction can own the whole page layout. Work screens (dashboards, inboxes, checkout) at 1 or 2 keep their known layout and put the idea on one working part.
+
 ### MCP tools
 
-`get_playbook`, `bend_brief`, `search_references`, `rate_references`, `rate_directions`, `extract_palette`, `new_canvas`, `open_canvas`, `add_to_canvas`, `arrange_canvas`, `get_canvas`, `delete_canvas`, `export_kit`, `cut_parts`, `frankenstein_page`, `remix_frankenstein`, `update_frankenstein`, `get_snapshot`, `place_kept`, `reconcile_direction`.
+`ping`, `get_playbook`, `bend_brief`, `search_references`, `rate_references`, `rate_directions`, `extract_palette`, `new_canvas`, `open_canvas`, `add_to_canvas`, `arrange_canvas`, `get_canvas`, `delete_canvas`, `export_kit`, `cut_parts`, `frankenstein_page`, `remix_frankenstein`, `update_frankenstein`, `get_snapshot`, `place_kept`, `reconcile_direction`.
 
+- `ping` checks the connection and names the oldest plugin version the server supports (`minPlugin`).
 - `get_playbook` returns the playbook for a skill, a step or a subagent by name (for example `gobanana-explore` or `gobanana-explore/intake`). Every skill and subagent calls it first.
 
 - `bend_brief` takes `platform` and up to 3 `pages`, and returns `wildSpots` when no pages are given.

@@ -16,7 +16,7 @@ const strike = (key) => { const s = readSession(input.session_id), n = (s.strike
 if (mode === "pre" && tool === "Write" && isHtml(ti.file_path)) {
   const text = String(ti.content || "");
   if (isUiDraft(ti.file_path, text, session.design) && !playbookLoaded(input.transcript_path) && strike("playbook")) {
-    deny("GoBanana gate: this HTML screen is being written before any GoBanana playbook was loaded, so none of the taste, craft or Arabic rules apply. Call get_playbook { name: 'gobanana-draft', more: ['gobanana-draft/content-and-arabic', 'gobanana-draft/type-color-layout', 'gobanana-draft/slop-tells', 'gobanana-draft/render-loop'] } (or the gobanana-explore skill when there is no picked direction), build from it, then write the file. If the GoBanana tools are missing, tell the user to connect GoBanana and write again.");
+    deny("GoBanana gate: this HTML screen is being written before any GoBanana playbook was loaded, so none of the taste, craft or Arabic rules apply. Call get_playbook { name: 'gobanana-draft', more: ['gobanana-draft/content-and-arabic', 'gobanana-draft/type-color-layout', 'gobanana-draft/slop-tells', 'gobanana-draft/render-loop'] } (or the gobanana-explore skill when there is no picked direction), build from it, then write the file. GoBanana tools may carry any prefix. If none are there, tell the user to connect the GoBanana connector at claude.ai or run /mcp, then write again.");
   }
 }
 
