@@ -5,7 +5,7 @@ description: Build one Frankenstein page into a beautiful, checked screen, craft
 
 # GoBanana build
 
-Plugin 0.4.4. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.4.4, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.4.5. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.4.5, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
