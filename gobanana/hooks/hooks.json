@@ -2,13 +2,49 @@
   "description": "GoBanana guardrails: route page design requests to GoBanana, check UI drafts as they are written, and hold an unchecked draft back from being published.",
   "hooks": {
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/gb-route.mjs\"", "timeout": 10 }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/gb-route.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
     ],
     "PreToolUse": [
-      { "matcher": "Write|Artifact|SendUserFile", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/gb-gate.mjs\" pre", "timeout": 10 }] }
+      {
+        "matcher": "Write|Artifact|SendUserFile",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/gb-gate.mjs\" pre",
+            "timeout": 10
+          }
+        ]
+      }
     ],
     "PostToolUse": [
-      { "matcher": "Write|Edit|MultiEdit", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/gb-gate.mjs\" post", "timeout": 10 }] }
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/gb-gate.mjs\" post",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*get_playbook",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/gb-gate.mjs\" loaded",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

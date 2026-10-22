@@ -163,6 +163,11 @@ Nothing is cut out of an image file. A part is a rectangle the browser shows ove
 - **No scraping.** References come from web search results only.
 - Palette extraction reads thumbnails in memory on the server to compute colors, then drops them.
 
+## Privacy
+
+- The GoBanana server records which tools are used and whether they work, never what you type. See the [privacy policy](https://gobanana.fun/en/privacy).
+- The plugin's hooks run on your machine and send nothing anywhere: they keep a small session flag in your temp folder and never read your conversation history.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

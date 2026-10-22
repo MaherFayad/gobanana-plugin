@@ -3,6 +3,8 @@
 //         SendUserFile publishes an HTML screen, gb-measure must have run on it since its last edit with no FAIL.
 //         Each block happens at most twice per file version, so a machine that cannot render is never stuck.
 //   post: after Write, Edit or MultiEdit of an HTML file, static copy checks; FAIL lines go back to Claude to fix now.
+//   loaded: after a GoBanana get_playbook call, mark the session. The hooks never read the transcript
+//           (Anthropic Software Directory Policy 1.F: no querying chat history).
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { copyFindings, isHtml, isUiDraft, playbookLoaded, readChecked, readSession, readStdin, writeSession } from "./gb-rules.mjs";
@@ -13,9 +15,11 @@ const deny = (reason) => { process.stdout.write(JSON.stringify({ hookSpecificOut
 /** At most two blocks per key; the third try passes, so a missing browser or connector never traps the run. */
 const strike = (key) => { const s = readSession(input.session_id), n = (s.strikes?.[key] || 0) + 1; writeSession(input.session_id, { ...s, strikes: { ...s.strikes, [key]: n } }); return n <= 2; };
 
+if (mode === "loaded") writeSession(input.session_id, { ...session, playbook: true });
+
 if (mode === "pre" && tool === "Write" && isHtml(ti.file_path)) {
   const text = String(ti.content || "");
-  if (isUiDraft(ti.file_path, text, session.design) && !playbookLoaded(input.transcript_path) && strike("playbook")) {
+  if (isUiDraft(ti.file_path, text, session.design) && !playbookLoaded(session) && strike("playbook")) {
     deny("GoBanana gate: this HTML screen is being written before any GoBanana playbook was loaded, so none of the taste, craft or Arabic rules apply. Call get_playbook { name: 'gobanana-draft', more: ['gobanana-draft/content-and-arabic', 'gobanana-draft/type-color-layout', 'gobanana-draft/slop-tells', 'gobanana-draft/render-loop'] } (or the gobanana-explore skill when there is no picked direction), build from it, then write the file. GoBanana tools may carry any prefix. If none are there, tell the user to connect the GoBanana connector at claude.ai or run /mcp, then write again.");
   }
 }

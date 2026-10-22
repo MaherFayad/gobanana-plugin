@@ -1,6 +1,6 @@
 // GoBanana rules shared by the plugin hooks. Node built-ins only. The two Arabic word lists are the same text as
 // gb-measure's (playbook gobanana-draft/check-scripts); a server test keeps them equal.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const AR_SLANG = 'عشان|علشان|دلوقتي|دلوقت|كده|كدا|ازاي|إزاي|مش|عايز|عايزة|عاوز|بتاع|بتاعت|بتاعك|ده|دي|برا|جوا|قايمة|مستني|مستنية|مستنيك|مستنياك|لسه|لسة|اتعمل|اتضاف|يتضاف|بيستعمل|بيسأل|بيشتغل|بيعمل|بتعمل|الحين|ايش|إيش|وش|ليش|شلون|وايد|يبغى|تبغى|هيك|شو|بدي|بدك|منيح|كتير';
@@ -12,8 +12,11 @@ const STRONG = /\b(concepts?|variants?|variations?|mock-?ups?|wireframes?|redesi
 const VERB = /\b(design|build|make|draft|create|show|mock|style|restyle|rethink|explore)\b/i;
 const THING = /\b(page|screen|dashboard|landing|homepage|website|site|ui|ux|app|view|flow|onboarding|checkout|paywall|overview|layout|hero|component|interface)s?\b/i;
 const AR = /(كونسبت|تصميم|تصاميم|صمم|صمّم|اتجاهات|واجهة|واجهات|موك ?اب|ماكيت|نموذج أولي|إعادة تصميم|ريديزاين|شكل الصفحة|شكل الشاشة)/;
+/** Messages the harness delivers on the user's turn that a person did not type: agent reports, task and system notices. */
+const NOT_TYPED = /^\s*(?:<agent-message\b|<task-notification\b|\[SYSTEM NOTIFICATION|Another Claude session sent a message|\[Subagent hand-back\])/i;
 export function isDesignRequest(prompt) {
   const p = String(prompt || "");
+  if (NOT_TYPED.test(p)) return false;
   return STRONG.test(p) || (VERB.test(p) && THING.test(p)) || AR.test(p);
 }
 
@@ -24,10 +27,8 @@ export function writeSession(id, s) { try { mkdirSync(stateDir(), { recursive: t
 /** gb-measure writes this after each run: { [absPath]: { mtimeMs, fails, at } }. */
 export function readChecked() { try { return JSON.parse(readFileSync(join(stateDir(), "checked.json"), "utf8")); } catch { return {}; } }
 
-/** True when the transcript shows GoBanana's get_playbook was called in this session. */
-export function playbookLoaded(transcriptPath) {
-  try { return existsSync(transcriptPath) && /"name"\s*:\s*"[^"]*get_playbook"/.test(readFileSync(transcriptPath, "utf8")); } catch { return false; }
-}
+/** True when a GoBanana get_playbook call finished in this session (the "loaded" hook marks it; no transcript is read). */
+export const playbookLoaded = (session) => session.playbook === true;
 
 export const isHtml = (p) => /\.html?$/i.test(String(p || ""));
 /** A UI draft: a GoBanana draft path, the draft markers, or any HTML screen written in a design session. */
