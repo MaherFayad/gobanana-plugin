@@ -1,11 +1,11 @@
 ---
 name: gobanana-draft
-description: Draft a picked GoBanana direction into one checked screen, craft first, for any screen type (landing, app, dashboard, canvas tool, checkout, email or slide). Takes the look from the direction's craft references and the user's confirmed taste, builds ONE screen with real content in every listed language, renders it at 390x844 and 1440x900, grades it against the craft reference, places it on the GoBanana board and asks for a reaction before building more. Use when the user says "draft the picks", "draft this direction", "draft 2 and 5", "mock it up", "build this direction", "show me what it looks like", or answers "Draft any of these?". Also for several concepts of one screen at once ("8 concepts with the same data", "a concept sheet"), for putting a direction on the real product ("apply it to our checkout"), or for versions to flip between ("show me versions"). Runs get_canvas, reconcile_direction, get_snapshot and add_to_canvas. Use gobanana-explore when there are no directions yet.
+description: Draft a picked GoBanana direction into one checked screen of any type (landing, app, dashboard, canvas tool, checkout, email or slide) through a studio loop. Four rough sketches on four stages, a critic who did not make them picks one, the hero shot of its one object is crafted through pin tests, then the screen is built with real content in every listed language, rendered at 390x844 and 1440x900 and given a final crit, placed on the GoBanana board and shown for a reaction before building more. Use when the user says "draft the picks", "draft this direction", "draft 2 and 5", "mock it up", "build this direction", "show me what it looks like", or answers "Draft any of these?". Also for several concepts of one screen at once ("8 concepts with the same data"), for putting a direction on the real product ("apply it to our checkout"), or for versions to flip between ("show me versions"). Runs get_canvas, reconcile_direction, get_snapshot and add_to_canvas. Use gobanana-explore when there are no directions yet.
 ---
 
 # GoBanana draft
 
-Plugin 0.4.5. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.4.5, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.4.6. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.4.6, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 

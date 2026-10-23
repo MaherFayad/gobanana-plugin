@@ -49,7 +49,7 @@ You can tell when a copy is behind: every skill calls the GoBanana `ping` tool o
 4. **See every result.** The agent looks at every reference image before it keeps one, keeps 8 to 12 per direction with a "steal:" note, and marks 2 to 3 per direction as the craft target the build must match.
 5. **Shipped vs next.** If you have a Mobbin connector, real shipped screens that fit each direction go on the board with a "Shipped today" note. The board shows them straight from Mobbin; nothing is downloaded.
 6. **Board.** A Space section (what the category does) and one section per direction, clustered by what to take (layout, components, type, color, motion, art), each tile with its source link.
-7. **Draft or build.** Draft a pick into one checked screen (gobanana-draft), placed on the board beside its direction, or have the agent research, spec and build the feature properly in Claude Code (gobanana-finish). Every run ends with the canvas link; the HTML is in addition to the board, not instead of it.
+7. **Draft or build.** Draft a pick into one checked screen (gobanana-draft: four sketches, a critic's pick, a hero shot, then the screen), placed on the board beside its direction, or have the agent research, spec and build the feature properly in Claude Code (gobanana-finish). Every run ends with the canvas link; the HTML is in addition to the board, not instead of it.
 8. **Hand off.** Scoped files for your coding tools, under `design/explorations/<slug>/` ([Hand off](https://gobanana.fun/docs/guides/handoff/)). Frankenstein it, palette and critique are there when you want them.
 
 ## Skills
@@ -58,7 +58,7 @@ You can tell when a copy is behind: every skill calls the GoBanana `ping` tool o
 | --- | --- | --- |
 | `gobanana-explore` | "go wild on our launch page", "crazy ideas for onboarding", "help me design the checkout" | One intake stop saved to CONTEXT.md, a sweep that names the rut, fresh grounded ideas bent into 4 directions (or your count) that differ in structure, every reference seen before it is kept, 2 to 3 craft targets per direction, Mobbin screens when connected, a clustered board and compact cards |
 | `gobanana-finish` | "build it properly", "end to end", "production ready" | The intake, then problem, space, spec and wireframes for your OK, 4 directions to pick, one screen first for your reaction, then the code, reviewed against the craft references |
-| `gobanana-draft` | "draft these", "draft my pick" | One checked screen per pick, built to the direction's craft references, rendered and graded before you see it, then placed on the board beside its direction |
+| `gobanana-draft` | "draft these", "draft my pick" | One checked screen per pick, through a studio loop: four rough sketches, a critic's pick, a hero shot crafted through pin tests, then the screen, built to the direction's craft references, rendered and graded before you see it, then placed on the board beside its direction |
 | `gobanana-moodboard` | "make a moodboard", "arrange this", "put it in FigJam" | Sections per direction, art row above UI grid, steal notes, clean layout; optionally FigJam or an HTML board |
 | `gobanana-palette` | "palette", "colors from the art direction" | Extracts colors with roles and tags each pair `ship` or `explore` by WCAG 2.2 contrast |
 | `gobanana-design-md` | "DESIGN.md for this page" | Scoped DESIGN.md under `design/explorations/<slug>/`, linted with `@google/design.md` |
