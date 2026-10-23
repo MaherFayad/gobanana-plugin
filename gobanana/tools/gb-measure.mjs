@@ -152,7 +152,8 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   const blurOf = (el) => { for (let a = el, d = 0; a && a !== document.body && d < 8; a = a.parentElement, d++) if (/blur\(/.test(gcs(a).filter)) return true; return false; };
   const blurred = shown.filter((e) => e.text.length >= 2 && e.op >= 0.1 && blurOf(e.el));
   if (blurred.length) add('FAIL', 'blurred-text', `${blurred.length} text block(s) sit under a blur filter: ${blurred.slice(0, 3).map((e) => '"' + clip(e.text) + '"').join(', ')}; never blur text: show it sharp, or hide it (and say what is hidden in words)`);
-  const share = (a) => { const n = chars(a); return n ? chars(a.filter((e) => e.px < 14)) / n : 0; }, smallShare = Math.max(share(fold), share(shown)), scaled = shown.filter((e) => e.px < 14 && e.size >= 14);
+  // 13.9: a 14px label inside a scaled viewBox renders at 13.99px; sub-pixel rounding is not small type.
+  const share = (a) => { const n = chars(a); return n ? chars(a.filter((e) => e.px < 13.9)) / n : 0; }, smallShare = Math.max(share(fold), share(shown)), scaled = shown.filter((e) => e.px < 13.9 && e.size >= 14);
   if (smallShare > 0.1) add('FAIL', 'small-share', `${Math.round(smallShare * 100)}% of the visible characters are under 14px as rendered (first screen ${Math.round(share(fold) * 100)}%, page ${Math.round(share(shown) * 100)}%)${scaled.length ? `, ${scaled.length} block(s) shrunk by a transform or viewBox ("${clip(scaled[0].text)}" ${pxs(scaled[0])})` : ''}; 10% at most, data and labels are 14px or more on screen`);
   const longest = Math.max(0, ...shown.filter((e) => e.text.length > 120).map((e) => Math.max(...e.rects.map((r) => r.width)) / (e.size * 0.5)));
   if (!mobile && longest > 88) add('WARN', 'measure', `a paragraph runs about ${Math.round(longest)} characters a line; cap at 45 to 75 (max-width: 62ch)`);
