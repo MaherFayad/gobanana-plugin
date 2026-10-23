@@ -1,0 +1,70 @@
+// GoBanana motion, phone and type lint. No dependencies. Usage: node gb-lint.mjs drafts/<slug>.html [--tokens tokens.json]
+import { readFileSync } from "node:fs";
+const argv = process.argv.slice(2), ti = argv.indexOf("--tokens"), file = argv.find((a, i) => !a.startsWith("--") && (ti < 0 || i !== ti + 1));
+const src = readFileSync(file, "utf8");
+// With --tokens, the token families decide the script: fonts.arabic and arabicDisplay are Arabic, display and text Latin.
+let tokenFonts = {}; try { if (ti >= 0) tokenFonts = JSON.parse(readFileSync(argv[ti + 1], "utf8")).fonts || {}; } catch {}
+const famKey = (f) => String(f || "").split(",")[0].replace(/["']/g, "").trim().toLowerCase();
+const css = /<style/i.test(src) ? [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n") : src;
+const out = [];
+const add = (rule, at, lvl = "FAIL") => out.push(`${lvl} ${rule}: ${at.trim().slice(0, 90)}`);
+// Type: custom properties resolved, rem at 16px; 3 or more rules under 14px FAIL (fewer WARN), fine print and svg aside.
+const vars = new Map([...css.matchAll(/(--[\w-]+)\s*:\s*([^;}]+)/g)].map((m) => [m[1], m[2].trim()]).reverse());
+const rv = (v, d = 0) => (d > 4 ? v : v.replace(/var\(\s*(--[\w-]+)\s*(?:,([^)]*))?\)/g, (_, n, fb) => rv(vars.get(n) ?? fb ?? "", d + 1)));
+const px = (v) => { const m = String(v).trim().match(/^([\d.]+)(px|rem)$/i); return m ? +m[1] * (/rem/i.test(m[2]) ? 16 : 1) : null; };
+const low = (v) => { v = rv(v).trim().toLowerCase(); const k = { "xx-small": 9, "x-small": 10, small: 13 }[v]; if (k) return k; const f = v.match(/^(clamp|min)\((.*)\)$/); if (f) { const n = f[2].split(",").map(px).filter((x) => x !== null); return n.length ? (f[1] === "clamp" ? px(f[2].split(",")[0]) : Math.min(...n)) : null; } return px(v); };
+const ARABIC_FAMILY = /arab|naskh|kufi|ruqaa|tajawal|cairo|almarai|amiri|lateef|harmattan|reem|readex|changa(?!\s*one)|messiri|markazi|scheherazade|vazir|lalezar|mirza|rakkas|aref|jomhuria|blaka|bhaijaan|thmanyah|alexandria|marhey|\bmada\b|zain\b/i;
+const AR_TOKEN = new Set([tokenFonts.arabic, tokenFonts.arabicDisplay].filter(Boolean).map(famKey)), LATIN_TOKEN = new Set([tokenFonts.display, tokenFonts.text].filter(Boolean).map(famKey));
+const isArabicFamily = (f) => AR_TOKEN.has(famKey(f)) || (!LATIN_TOKEN.has(famKey(f)) && ARABIC_FAMILY.test(f));
+const GENERIC = /^(serif|sans-serif|monospace|cursive|system-ui|ui-[\w-]+|emoji|inherit|initial|unset|-apple-system|blinkmacsystemfont|segoe ui|roboto|helvetica neue|helvetica|arial)$/i;
+const families = new Set(), small = [];
+const FINE_PRINT = /^(?:.*[\s>+~])?(?:small|svg|tspan|text)(?:[.:#[].*)?$|\.(?:legal|fine)(?![\w-])|(?:^|[\s>+~])svg(?![\w-])/i;
+const finePrint = (sel) => sel.split(",").every((part) => FINE_PRINT.test(part.trim()));
+// Walk blocks, keeping the stack of at-rules around each rule; @import, @charset and @namespace first.
+const stack = []; let buf = "";
+for (const ch of css.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@(?:import|charset|namespace)\b(?:"[^"]*"|'[^']*'|\([^)]*\)|[^;"'(])*;/gi, "")) {
+  if (ch === ";" && !stack.length) { buf = ""; continue; }
+  if (ch === "{") { stack.push(buf.trim()); buf = ""; continue; }
+  if (ch === "}") {
+    const sel = stack.pop() ?? ""; const body = buf; buf = "";
+    if (sel.startsWith("@")) continue; // an at-rule prelude such as @media (hover:hover), not a selector
+    const media = stack.join(" ");
+    if (/gb-switch/.test(sel)) continue; // the variant switcher is dev chrome
+    if (!/\bprint\b/.test(media)) {
+      let under = "";
+      for (const m of body.matchAll(/(?:^|[;\s])font-size\s*:\s*([^;]+)/g)) { const n = low(m[1].replace(/!important/, "")); if (n !== null && n > 0 && n < 14) under ||= `${sel} { font-size: ${m[1].trim()} }`; }
+      for (const m of body.matchAll(/(?:^|[;\s])font\s*:\s*([^;]+)/g)) { const v = rv(m[1]), n = low((v.match(/([\d.]+(?:px|rem))(?:\s*\/\s*[\w.%]+)?\s+\S/) || [])[1] || ""); if (n !== null && n > 0 && n < 14) under ||= `${sel} { font: ${m[1].trim()} }`; const fam = (v.match(/[\d.]+(?:px|rem|em|%)(?:\s*\/\s*[\w.%]+)?\s+(.+)$/) || [])[1]; if (fam) families.add(fam.split(",")[0].replace(/["']/g, "").trim()); }
+      if (under && !finePrint(sel)) small.push(under);
+      for (const m of body.matchAll(/(?:^|[;\s])font-family\s*:\s*([^;]+)/g)) families.add(rv(m[1]).split(",")[0].replace(/["']/g, "").trim());
+    }
+    if (/:hover/.test(sel) && !/hover:\s*hover|prefers-reduced-motion:\s*reduce/.test(media)) add("ungated :hover", sel);
+    for (const m of body.matchAll(/(?:^|;)\s*transition(?:-property)?\s*:([^;]+)/g)) {
+      const v = m[1];
+      if (/\ball\b/.test(v) || v.split(",").some((p) => /^\s*[\d.]+m?s/.test(p))) add("transition: all", `${sel} { ${v} }`);
+      if (/(^|[\s,])(width|top|left|right|bottom|inset|margin[\w-]*|padding[\w-]*)\b/.test(v)) add("layout property animated", `${sel} { ${v} }`);
+      if (/(^|[\s,])((?:max-|min-)?height|grid-template-rows)\b/.test(v)) add("height animated: only an accordion or a leaving row, 200ms", sel, "CHECK");
+      if (/box-shadow/.test(v)) add("box-shadow animated (use opacity on a shadow layer or drop-shadow)", sel);
+    }
+    if (!/infinite/.test(body) && !/^:root$|data-direction/.test(sel)) for (const d of body.matchAll(/(?:^|;)\s*(?:transition|animation)(?:-duration)?\s*:([^;]+)/g)) for (const m of d[1].matchAll(/(\d+)ms|([\d.]+)s\b/g)) { const ms = m[1] ? +m[1] : +m[2] * 1000; if (ms > 300) add(`${ms}ms is over 300: only a sheet, toast, hold or once-only moment may`, sel, "CHECK"); }
+    if (/(^|;)\s*(margin|padding)-(left|right)\s*:|(^|;)\s*(left|right)\s*:/.test(body)) add("physical left/right: logical property, or measured on purpose?", sel, "CHECK");
+    if (/transform-origin\s*:\s*[^;]*\b(left|right)\b/.test(body)) add("physical transform-origin: use --origin-start unless measured", sel, "CHECK");
+    if (/translateX\((?![^)]*var\(--x-dir\))[^)]*\)/.test(body) && !/translateX\(0\)/.test(body)) add("translateX without --x-dir: does it flip in RTL?", sel, "CHECK");
+    continue;
+  }
+  buf += ch;
+}
+if (small.length) add(`${small.length} rule(s) set type under 14px: data and labels 14px, body 16px (17px Arabic), only fine print smaller`, small.slice(0, 3).join("; ").slice(0, 200), small.length >= 3 ? "FAIL" : "WARN");
+const fams = [...families].filter((f) => f && !GENERIC.test(f) && !/^var\(/.test(f));
+for (const [what, list] of [["Latin", fams.filter((f) => !isArabicFamily(f))], ["Arabic", fams.filter(isArabicFamily)]]) if (list.length > 2) add(`${list.length} ${what} font families, 2 at most per script`, list.join(", "));
+if (/ease-in(?!-out)/.test(css)) add("ease-in on UI", (css.match(/.{0,40}ease-in(?!-out).{0,10}/) || [""])[0]);
+if (/scale\(\s*0\s*\)/.test(css)) add("scale(0) entrance", "use scale(0.95) and opacity 0");
+if (/\b100vh\b/.test(css)) add("100vh", "use 100dvh (app shell) or 100svh (hero)");
+if (/(transition|animation)\s*:/.test(css) && !/prefers-reduced-motion/.test(css)) add("no prefers-reduced-motion block", "add the still version");
+if (!/-webkit-tap-highlight-color\s*:\s*transparent/.test(css)) add("tap highlight not removed", "html { -webkit-tap-highlight-color: transparent }");
+const vp = (src.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0];
+if (/<html/i.test(src)) {
+  if (!/viewport-fit=cover/.test(vp)) add("viewport", "add viewport-fit=cover");
+  if (/maximum-scale|user-scalable\s*=\s*no/.test(vp)) add("zoom blocked", "remove maximum-scale and user-scalable=no (SC 1.4.4)");
+}
+console.log(out.length ? out.join("\n") : "PASS: no motion, phone or type findings");
+process.exit(out.some((l) => l.startsWith("FAIL")) ? 1 : 0);

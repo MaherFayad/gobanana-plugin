@@ -8,11 +8,12 @@
 //   post: after Write, Edit or MultiEdit of an HTML file, static copy checks, plus layout checks on a UI draft (3 or
 //         more rules under 14px, more than 2 font families per script); FAIL lines go back to Claude to fix now, WARN
 //         lines go to Claude as context.
-//   loaded: after a GoBanana get_playbook call, mark the session. The hooks never read the transcript
+//   loaded: after a GoBanana get_playbook call, mark the session and copy the plugin's check scripts (tools/) into the
+//           gb temp folders, so the render loop never has to fetch code. The hooks never read the transcript
 //           (Anthropic Software Directory Policy 1.F: no querying chat history).
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { cannotRender, copyFindings, failIds, isHtml, isUiDraft, layoutFindings, playbookLoaded, readChecked, readSession, readStdin, writeSession } from "./gb-rules.mjs";
+import { cannotRender, copyFindings, failIds, installTools, isHtml, isUiDraft, layoutFindings, playbookLoaded, readChecked, readSession, readStdin, writeSession } from "./gb-rules.mjs";
 
 const mode = process.argv[2], input = await readStdin(), ti = input.tool_input || {}, tool = String(input.tool_name || "");
 const session = readSession(input.session_id), abs = (p) => resolve(input.cwd || process.cwd(), String(p));
@@ -21,7 +22,7 @@ const deny = (reason) => { process.stdout.write(JSON.stringify({ hookSpecificOut
 const strikes = (key) => { const s = readSession(input.session_id), n = (s.strikes?.[key] || 0) + 1; writeSession(input.session_id, { ...s, strikes: { ...s.strikes, [key]: n } }); return n; };
 const strike = (key) => strikes(key) <= 2;
 
-if (mode === "loaded") writeSession(input.session_id, { ...session, playbook: true });
+if (mode === "loaded") { writeSession(input.session_id, { ...session, playbook: true }); installTools(); }
 
 if (mode === "pre" && tool === "Write" && isHtml(ti.file_path)) {
   const text = String(ti.content || "");

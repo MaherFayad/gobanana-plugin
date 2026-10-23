@@ -1,8 +1,9 @@
 // GoBanana rules shared by the plugin hooks. Node built-ins only. The two Arabic word lists are the same text as
 // gb-measure's (playbook gobanana-draft/check-scripts); a server test keeps them equal.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const AR_SLANG = 'عشان|علشان|دلوقتي|دلوقت|كده|كدا|ازاي|إزاي|مش|عايز|عايزة|عاوز|بتاع|بتاعت|بتاعك|ده|دي|برا|جوا|قايمة|مستني|مستنية|مستنيك|مستنياك|لسه|لسة|اتعمل|اتضاف|يتضاف|بيستعمل|بيسأل|بيشتغل|بيعمل|بتعمل|الحين|ايش|إيش|وش|ليش|شلون|وايد|يبغى|تبغى|هيك|شو|بدي|بدك|منيح|كتير';
 export const AR_LOAN = 'كونسبت|كونسبتس|كونسيبت|ديزاين|يوزر|يوزرز|فيدباك|تاسك|تاسكات|أبديت|ابديت|سيتنج|سيتنجز|بروجكت|بروجيكت|ريفيو|أبروف|ابروف|كوميت|ستيتس';
@@ -33,6 +34,30 @@ export function gbDirs() {
   const dirs = [process.env.TMPDIR ? join(process.env.TMPDIR, "gb") : "", join("/tmp", "gb"), join(tmpdir(), "gb")].filter(Boolean);
   return [...new Set(dirs)];
 }
+/**
+ * Copies the check scripts the plugin ships (tools/gb-*.mjs) into every gb folder, so the playbooks'
+ * `[ -f "$T/gb-measure.mjs" ] || curl ...` finds them and never fetches code (some hosts block that).
+ * Writes only a file that differs. Returns how many files it wrote; never throws.
+ */
+export function installTools(root = process.env.CLAUDE_PLUGIN_ROOT || join(dirname(fileURLToPath(import.meta.url)), "..")) {
+  let wrote = 0;
+  const src = join(root, "tools");
+  let files = [];
+  try { files = readdirSync(src).filter((f) => /^gb-[a-z0-9-]+\.mjs$/.test(f)); } catch { return 0; }
+  for (const dir of gbDirs()) {
+    for (const f of files) {
+      try {
+        const code = readFileSync(join(src, f), "utf8"), dest = join(dir, f);
+        if (existsSync(dest) && readFileSync(dest, "utf8") === code) continue;
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(dest, code);
+        wrote++;
+      } catch {}
+    }
+  }
+  return wrote;
+}
+
 /** gb-measure writes this after each run: { [absPath]: { mtimeMs, fails, at, summary } }. The newest stamp per file wins. */
 export function readChecked() {
   const out = {};
