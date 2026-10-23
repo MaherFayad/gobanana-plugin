@@ -5,7 +5,7 @@ description: Explore design directions for any page or screen (landing page, app
 
 # GoBanana explore
 
-Plugin 0.5.1. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.5.1, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.5.2. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.5.2, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
@@ -16,4 +16,4 @@ These hold even if get_playbook fails:
 5. Never reuse an idea in `recentIdeas`. No lens unless asked. Saved taste only after a yes; no dark default.
 6. End with the canvas web link. Never hand-write UI concepts outside this flow.
 
-Call get_playbook with name `gobanana-explore` and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-explore` and plugin `0.5.2`, and follow it exactly; batch the playbooks it names in `more`.

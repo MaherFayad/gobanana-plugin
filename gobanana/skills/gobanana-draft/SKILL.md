@@ -5,7 +5,7 @@ description: Draft a picked GoBanana direction into one checked screen of any ty
 
 # GoBanana draft
 
-Plugin 0.5.1. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.5.1, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.5.2. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.5.2, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
@@ -15,6 +15,6 @@ These hold even if get_playbook fails:
 4. Body 16px+, one dominant block, every listed language, WCAG 2.2 AA; never show an unchecked draft.
 5. Gulf MSA Arabic, no dialect; data as product words, never logs.
 6. Concepts differ in skeleton and mechanic. Taste only as given or confirmed. The output the user names wins.
-7. Place each draft on the board (add_to_canvas type "build" with gb-measure's measure) when you can; end with the canvas web link.
+7. Place each draft (add_to_canvas type "build" with gb-measure's measure) when you can; end with the canvas web link.
 
-Call get_playbook with name `gobanana-draft` and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-draft` and plugin `0.5.2`, and follow it exactly; batch the playbooks it names in `more`.
