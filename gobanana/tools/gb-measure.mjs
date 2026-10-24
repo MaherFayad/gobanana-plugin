@@ -266,7 +266,7 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   for (const j of jobs.slice(0, 20000)) { if (!j.fix && (j.y - scrollY < 0 || j.y - scrollY >= H)) scrollTo({ top: j.y - 40, left: X0, behavior: 'instant' }); const x = j.x - scrollX, y = j.y - scrollY; if (x >= 0 && x < W && y >= 0 && y < H) j.fn(document.elementsFromPoint(x, y), x, y); }
   scrollTo({ top: Y0, left: X0, behavior: 'instant' }); pe.remove();
   for (const [key, n] of hits) if (n >= 2) overlaps.add(key);
-  if (overlaps.size) add('FAIL', 'text-overlap', `${overlaps.size} overlap(s) of text with text, a control or a marker: ${[...overlaps].slice(0, 3).join('; ')}; give each label its own room (offset it, shorten it, or drop it at this size)`);
+  if (overlaps.size) add('FAIL', 'text-overlap', `${overlaps.size} overlap(s) of text with text, a control or a marker: ${[...overlaps].slice(0, 3).join('; ')}; give each label its own room (offset it, shorten it, wrap it, or give the object more room)`);
   // clipped-text
   const ell = (x) => { const s = gcs(x); return s.textOverflow === 'ellipsis' || (s.webkitLineClamp && s.webkitLineClamp !== 'none'); }, cutText = [];
   for (const e of shown) {

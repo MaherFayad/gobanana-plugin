@@ -5,7 +5,7 @@ description: Finished mode. Research, spec and build a page, feature or whole ap
 
 # GoBanana finish
 
-Plugin 0.5.2. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.5.2, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.5.3. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.5.3, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
@@ -17,4 +17,4 @@ These hold even if get_playbook fails:
 6. Every state reachable, worst case data, every listed language, WCAG 2.2 AA; never show an unchecked draft.
 7. Directions differ in structure; taste only as given or confirmed. End with the canvas web link.
 
-Call get_playbook with name `gobanana-finish` and plugin `0.5.2`, and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-finish` and plugin `0.5.3`, and follow it exactly; batch the playbooks it names in `more`.
