@@ -1,5 +1,5 @@
 {
-  "description": "GoBanana guardrails: route page design requests to GoBanana, check UI drafts as they are written, and hold an unchecked draft back from being published.",
+  "description": "GoBanana guardrails: route GoBanana asks (the name or \"go wild\") to the GoBanana skills, and, in a GoBanana session only, check UI drafts as they are written and hold an unchecked draft back from being published.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -36,7 +36,7 @@
         ]
       },
       {
-        "matcher": "mcp__.*get_playbook",
+        "matcher": "mcp__.*get_playbook|mcp__.*[Bb]anana.*__(new|open|get)_canvas",
         "hooks": [
           {
             "type": "command",

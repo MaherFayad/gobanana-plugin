@@ -9,7 +9,7 @@ export const AR_SLANG = 'عشان|علشان|دلوقتي|دلوقت|كده|كد
 export const AR_LOAN = 'كونسبت|كونسبتس|كونسيبت|ديزاين|يوزر|يوزرز|فيدباك|تاسك|تاسكات|أبديت|ابديت|سيتنج|سيتنجز|بروجكت|بروجيكت|ريفيو|أبروف|ابروف|كوميت|ستيتس';
 export const arWord = (list) => new RegExp('(?:^|[^\\u0600-\\u06FF])[وف]?(' + list + ')(?![\\u0600-\\u06FF])', 'g');
 
-/** A request to design, redesign or show concepts of a page or screen, in English or Arabic. */
+/** A request to design, redesign or show concepts of a page or screen, in English or Arabic (a continuation test inside a GoBanana flow). */
 const STRONG = /\b(concepts?|variants?|variations?|mock-?ups?|wireframes?|redesign|re-design|prototypes?|moodboards?|art direction|design directions?|ui ideas|design ideas|go wild|make it (?:cool|wild|weird|pop|beautiful|pretty|nicer|look (?:good|better|amazing))|bananas)\b/i;
 const VERB = /\b(design|build|make|draft|create|show|mock|style|restyle|rethink|explore)\b/i;
 const THING = /\b(page|screen|dashboard|landing|homepage|website|site|ui|ux|app|view|flow|onboarding|checkout|paywall|overview|layout|hero|component|interface)s?\b/i;
@@ -21,6 +21,17 @@ export function isDesignRequest(prompt) {
   if (NOT_TYPED.test(p)) return false;
   return STRONG.test(p) || (VERB.test(p) && THING.test(p)) || AR.test(p);
 }
+/** The user asks for GoBanana by name (any casing or spacing, a gobanana.fun link) or for wildness ("go wild", "make it bananas"). */
+const ASKED = /\bgo[\s_-]*bananas?\b|\bmake\s+it\s+bananas\b|\bgo\s+wild\b/i;
+export function asksForGoBanana(prompt) {
+  const p = String(prompt || "");
+  return !NOT_TYPED.test(p) && ASKED.test(p);
+}
+/**
+ * A GoBanana flow already ran in this session: the route hook fired on a GoBanana ask, a get_playbook call finished,
+ * or a GoBanana canvas was opened. Owner 2026-10-26: outside such a session the hooks stay silent on every design task.
+ */
+export const flowActive = (session) => !!(session.design || session.playbook || session.canvas);
 
 const stateDir = () => join(process.env.TMPDIR || "/tmp", "gb");
 const sessionFile = (id) => join(stateDir(), `session-${String(id || "none").replace(/[^\w-]/g, "")}.json`);
