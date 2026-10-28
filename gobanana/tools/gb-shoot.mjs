@@ -1,4 +1,4 @@
-// gb-tools v2: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v3: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-shoot: every render-loop shot in one browser, 4 pages at a time, and contact sheets of state shots.
 //   node gb-shoot.mjs <file.html|url> [--en <url>] [--out <dir>] [--tokens tokens.json] [--languages en] [--viewport 390x844] [--states empty,loading,error] [--no-worst] [--landing] [--variants 3]
 // --viewport (repeat it, or 390x844,1440x900), else tokens.viewports (--tokens, or a tokens.json beside the file), else 390x844 and 1440x900.

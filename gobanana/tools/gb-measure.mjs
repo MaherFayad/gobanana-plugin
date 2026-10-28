@@ -1,4 +1,4 @@
-// gb-tools v2: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v3: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-measure: render a draft in its one language at the brief's viewports (390x844 and 1440x900 when none is given), check the accessibility floor and content honesty, print FAIL and WARN.
 //   node gb-measure.mjs <file.html|url> [--en <url>] [--tokens tokens.json] [--languages en] [--out <dir>] [--viewport 390x844]
 //     [--states loading,error] [--taste-allows mechanic-missing] [--landing] [--json]
