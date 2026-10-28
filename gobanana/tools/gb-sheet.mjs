@@ -1,4 +1,4 @@
-// gb-tools v1: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v2: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-sheet: sketches (or one view) as one labelled contact sheet for a crit.
 //   node gb-sheet.mjs <a.html[?query]> [b.html ...] [--size 1440x900] [--scale 1] [--out <dir>] [--name sheet] [--jpeg]
 // One PNG per file, a sheet for 2 or more; --name names it, --jpeg adds 1x JPEGs; a page that fails exits 1 after the rest.

@@ -1,11 +1,12 @@
-// gb-tools v1: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v2: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-shoot: every render-loop shot in one browser, 4 pages at a time, and contact sheets of state shots.
-//   node gb-shoot.mjs <file.html|url> [--en <url>] [--out <dir>] [--tokens tokens.json] [--languages en] [--states empty,loading,error] [--no-worst] [--landing] [--variants 3]
+//   node gb-shoot.mjs <file.html|url> [--en <url>] [--out <dir>] [--tokens tokens.json] [--languages en] [--viewport 390x844] [--states empty,loading,error] [--no-worst] [--landing] [--variants 3]
+// --viewport (repeat it, or 390x844,1440x900), else tokens.viewports (--tokens, or a tokens.json beside the file), else 390x844 and 1440x900.
 // ONE language: --languages, else the tokens' language, else the page's <html lang>, else English. States are shot only
 // when --states names them; ?data=worst unless --no-worst or a landing page (tokens.landing or --landing).
-// upload-<lang>-full.jpg: the whole page at 1440, scaled to at most 2000px tall and under the 3 MB board cap; a landing uploads it.
+// upload-<lang>-full.jpg: the whole page at the widest view (1440), scaled to at most 2000px tall and under the 3 MB board cap; a landing uploads it.
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
+import { dirname, join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
 
 const args = process.argv.slice(2);
 const opt = (n) => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; };
@@ -17,8 +18,14 @@ const langGiven = langArg.length > 0 || !!tokens?.primaryLanguage || tokenLangs.
 let languages = [...new Set(langArg.length ? langArg : [String(tokens?.primaryLanguage || tokenLangs[0] || 'en').toLowerCase()])];
 const noWorst = flag('no-worst'), landing = flag('landing') || tokens?.landing === true;
 const out = resolve(opt('out') || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), asked = opt('lang');
+const vpArg = []; for (let v; (v = opt('viewport')) !== null;) vpArg.push(v);
 const variants = Number(opt('variants') || 0), statesArg = opt('states'), target = args[0];
-if (!target && !languages.every((l) => urlFor[l])) { console.error('usage: node gb-shoot.mjs <file.html|url> [--out dir] [--tokens tokens.json] [--languages en] [--states empty,loading,error] [--no-worst] [--landing] [--variants 3]'); process.exit(2); }
+if (!target && !languages.every((l) => urlFor[l])) { console.error('usage: node gb-shoot.mjs <file.html|url> [--out dir] [--tokens tokens.json] [--languages en] [--viewport 390x844] [--states empty,loading,error] [--no-worst] [--landing] [--variants 3]'); process.exit(2); }
+const nearTokens = (src) => { try { if (/^https?:|^file:/.test(src)) return null; return JSON.parse(readFileSync(join(dirname(resolve(src.split('?')[0])), 'tokens.json'), 'utf8')); } catch { return null; } };
+const vpList = (v) => (Array.isArray(v) ? v : [v]).flatMap((x) => String(x || '').split(',')).map((s) => s.trim()).filter(Boolean);
+const viewports = (vpArg.length ? vpList(vpArg) : vpList(tokens?.viewports ?? (target ? nearTokens(target)?.viewports : null))).map((s) => { const m = /^(\d{3,4})x(\d{3,4})$/.exec(s); if (!m) { console.error(`--viewport takes WIDTHxHEIGHT, for example 390x844 (got "${s}")`); process.exit(2); } return [+m[1], +m[2]]; }).sort((a, b) => a[0] - b[0]);
+if (!viewports.length) viewports.push([390, 844], [1440, 900]);
+const [sw, sh] = viewports[0], [ww] = viewports[viewports.length - 1]; // states, markers and variants at the smallest view; the whole page at the widest
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 // Only the states asked with --states (review 2026-10-28: the tokens' states were shot, then FAILed as not wired, on pages that have none).
 const SELF = ['default', 'idle'], ACT = ['hover', 'focus', 'focus-visible', 'active', 'pressed', 'moving', 'dragging'], allStates = [...new Set((statesArg || '').split(',').map(kebab).filter(Boolean))];
@@ -43,7 +50,7 @@ const MAX_H = 2000, CAP = 3 * 1024 * 1024;
 const fullJpeg = async (png) => { const w = png.readUInt32BE(16), h = png.readUInt32BE(20), k = Math.min(1, MAX_H / h), tw = Math.max(1, Math.round(w * k)), th = Math.max(1, Math.round(h * k)), p = await browser.newPage();
   try { const b64 = await p.evaluate(async ({ src, tw, th }) => { const img = new Image(); img.src = src; await img.decode(); const c = Object.assign(document.createElement('canvas'), { width: tw, height: th }), x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, tw, th); for (const q of [0.82, 0.72, 0.62, 0.5]) { const d = c.toDataURL('image/jpeg', q).split(',')[1]; if (d.length * 0.75 <= 900 * 1024 || q === 0.5) return d; } }, { src: 'data:image/png;base64,' + png.toString('base64'), tw, th });
     return { jpg: Buffer.from(b64, 'base64'), w: tw, h: th }; } finally { await p.close(); } };
-// The 390 default view first: marker states, one marker of each, the hero figure.
+// The smallest default view first: marker states, one marker of each, the hero figure.
 const FIGURE = ({ px = 0, list = [] } = {}) => {
   const vis = (e) => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width >= 1 && r.height >= 1 && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && !e.closest('[hidden],.gb-switch'); };
   const num = (t) => /\d/.test(t) && t.replace(/[\d\s.,:%+\-\u2212/()]/g, '').length <= 3;
@@ -55,17 +62,17 @@ const FIGURE = ({ px = 0, list = [] } = {}) => {
   let stale = !!fig?.e.closest('[data-stale]'); for (let a = fig?.e, d = 0; a && d < 3 && !stale; a = a.parentElement, d++) stale = /\bas of\b|last (known|updated)|آخر (قيمة|تحديث)|حتى الساعة|كما في|\b\d{1,2}:\d{2}\b/i.test(a.innerText || '');
   return { tagged: !!tagged[0], figure: fig && /\d/.test(fig.e.textContent) ? { text: fig.e.textContent.trim().slice(0, 24), px: Math.round(fig.size), stale } : null, named, markers };
 };
-const probe = await (async () => { const page = await browser.newPage({ viewport: { width: 390, height: 844 } }); try { await page.goto(url(first, {}), { waitUntil: 'load' }); await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(1500); return await page.evaluate(FIGURE, { list: states }); } catch { return { figure: null, named: [], markers: {} }; } finally { await page.close(); } })();
+const probe = await (async () => { const page = await browser.newPage({ viewport: { width: sw, height: sh } }); try { await page.goto(url(first, {}), { waitUntil: 'load' }); await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(1500); return await page.evaluate(FIGURE, { list: states }); } catch { return { figure: null, named: [], markers: {} }; } finally { await page.close(); } })();
 for (const id of probe.named) itemStates.add(kebab(id));
 const isItem = (s) => itemStates.has(s) || !!probe.markers[s], markerStates = states.filter((s) => isItem(s) && probe.markers[s]);
 const shots = [];
-for (const lang of order) for (const [w, h] of [[390, 844], [1440, 900]]) shots.push({ file: `view-${lang}-${w}`, lang, w, h, params: {}, upload: `upload-${lang}-${w}.jpg` });
-for (const lang of order) for (const [w, h] of [[390, 844], [1440, 900]]) shots.push({ file: `full-${lang}-${w}`, lang, w, h, params: {}, full: true, ...(w === 1440 ? { fullUpload: `upload-${lang}-full.jpg` } : {}) });
-for (const s of states.filter((x) => !markerStates.includes(x))) shots.push({ file: `state-${s}`, lang: first, w: 390, h: 844, params: { state: s }, sheet: true, item: isItem(s) });
-for (const s of markerStates) shots.push({ file: `marker-${s}`, lang: first, w: 390, h: 844, params: {}, marker: probe.markers[s] });
-if (!noWorst && !landing) shots.push({ file: 'worst', lang: first, w: 390, h: 844, params: { data: 'worst' }, sheet: true });
-if (states.includes('error')) for (const lang of others) shots.push({ file: `state-error-${lang}`, lang, w: 390, h: 844, params: { state: 'error' }, sheet: true });
-for (let v = 1; v <= variants; v++) for (const lang of order) shots.push({ file: `v${v}-${lang}-390`, lang, w: 390, h: 844, params: { v: String(v) } });
+for (const lang of order) for (const [w, h] of viewports) shots.push({ file: `view-${lang}-${w}`, lang, w, h, params: {}, upload: `upload-${lang}-${w}.jpg` });
+for (const lang of order) for (const [w, h] of viewports) shots.push({ file: `full-${lang}-${w}`, lang, w, h, params: {}, full: true, ...(w === ww ? { fullUpload: `upload-${lang}-full.jpg` } : {}) });
+for (const s of states.filter((x) => !markerStates.includes(x))) shots.push({ file: `state-${s}`, lang: first, w: sw, h: sh, params: { state: s }, sheet: true, item: isItem(s) });
+for (const s of markerStates) shots.push({ file: `marker-${s}`, lang: first, w: sw, h: sh, params: {}, marker: probe.markers[s] });
+if (!noWorst && !landing) shots.push({ file: 'worst', lang: first, w: sw, h: sh, params: { data: 'worst' }, sheet: true });
+if (states.includes('error')) for (const lang of others) shots.push({ file: `state-error-${lang}`, lang, w: sw, h: sh, params: { state: 'error' }, sheet: true });
+for (let v = 1; v <= variants; v++) for (const lang of order) shots.push({ file: `v${v}-${lang}-${sw}`, lang, w: sw, h: sh, params: { v: String(v) } });
 
 const take = async (s) => {
   const page = await browser.newPage({ viewport: { width: s.w, height: s.h } });
@@ -93,7 +100,7 @@ if (marks.length) {
 }
 for (let i = 0; i < tiles.length; i += 8) {
   const part = tiles.slice(i, i + 8), n = i / 8 + 1, html = join(out, `sheet-${n}.html`);
-  writeFileSync(html, `<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#fff;font:600 15px system-ui;color:#111;display:grid;grid-template-columns:repeat(4,390px);gap:16px;padding:16px;width:max-content}figure{margin:0}img{display:block;width:390px;height:844px;outline:1px solid #ccc}figcaption{padding:6px 0}</style>${part.map((s) => `<figure><figcaption>${s.file}</figcaption><img src="${s.file}.png"></figure>`).join('')}`);
+  writeFileSync(html, `<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#fff;font:600 15px system-ui;color:#111;display:grid;grid-template-columns:repeat(4,390px);gap:16px;padding:16px;width:max-content}figure{margin:0}img{display:block;width:390px;height:${Math.round(390 * sh / sw)}px;outline:1px solid #ccc}figcaption{padding:6px 0}</style>${part.map((s) => `<figure><figcaption>${s.file}</figcaption><img src="${s.file}.png"></figure>`).join('')}`);
   const page = await browser.newPage({ viewport: { width: 1640, height: 900 } });
   await page.goto(pathToFileURL(html).href, { waitUntil: 'load' }); await page.screenshot({ path: join(out, `sheet-${n}.png`), fullPage: true }); await page.close();
   sheets.push({ file: `sheet-${n}`, holds: part.map((s) => s.file) });
@@ -107,12 +114,12 @@ for (const s of sheets) console.log(`Sheet ${path(s.file)}: ${s.holds.join(', ')
 const ups = ok.filter((s) => s.upload && s.jpgKB), fulls = ok.filter((s) => s.fullUpload && s.fullKB);
 if (landing && fulls.length) console.log(`Upload to the board (get_upload_link): ${fulls.map((s) => `${join(out, s.fullUpload)} (${s.fullKB} KB)`).join(' ')}; a landing page places its whole page`);
 else if (ups.length) console.log(`Upload to the board (get_upload_link): ${ups.map((s) => `${join(out, s.upload)} (${s.jpgKB} KB)`).join(' ')}; the platform's main size first`);
-if (!landing) for (const s of fulls) console.log(`Whole page at 1440: ${join(out, s.fullUpload)} (${s.fullSize}, ${s.fullKB} KB)`);
+if (!landing) for (const s of fulls) console.log(`Whole page at ${ww}: ${join(out, s.fullUpload)} (${s.fullSize}, ${s.fullKB} KB)`);
 for (const s of [...(landing ? [] : ups), ...(landing ? fulls : [])]) { const kb = s.fullKB ?? s.jpgKB, f = s.fullUpload ?? s.upload; if (kb * 1024 > CAP) console.log(`WARN ${f} is ${kb} KB, over the board's 3 MB: it will be refused; shoot a shorter page`); else if (kb > 900) console.log(`WARN ${f} is ${kb} KB, over the 900 KB get_snapshot can show; the board still takes it (3 MB), but nobody can look at it there`); }
 const self = allStates.filter((s) => SELF.includes(s)), act = allStates.filter((s) => ACT.includes(s));
 if (self.length || act.length) console.log(`Not shot: ${[self.length ? `${self.join(', ')} (the default view itself)` : '', act.length ? `${act.join(', ')} (interaction states one element takes under a pointer, a key or a drag, not page states behind ?state=: gb-probe shows focus, look at the rest by hand)` : ''].filter(Boolean).join('; ')}`);
 // A marker state no element showed: shot as a page state, never failed as unchanged.
-const base = (lang) => ok.find((s) => s.file === `full-${lang}-390`)?.png;
+const base = (lang) => ok.find((s) => s.file === `full-${lang}-${sw}`)?.png;
 const same = ok.filter((s) => s.sheet && s.fullPng && base(s.lang)?.equals(s.fullPng)), wired = same.filter((s) => !s.item && s.file !== 'worst').map((s) => s.file);
 // ?data=worst was not asked for: an unwired one is said, never FAILed (--no-worst on a page with no data).
 if (same.some((s) => s.file === 'worst')) console.log('WARN worst: ?data=worst looks like the default view; wire worst case data behind it (long names, big numbers, empty fields), or pass --no-worst on a page with no data (a landing page, a rough screen)');

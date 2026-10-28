@@ -22,6 +22,8 @@ const deny = (reason) => { process.stdout.write(JSON.stringify({ hookSpecificOut
 /** Counts the blocks per key; the third try passes, so a missing browser, a connector or a false FAIL never traps the run. */
 const strikes = (key) => { const s = readSession(input.session_id), n = (s.strikes?.[key] || 0) + 1; writeSession(input.session_id, { ...s, strikes: { ...s.strikes, [key]: n } }); return n; };
 const strike = (key) => strikes(key) <= 2;
+/** A rough screen lives under design/gobanana/roughs/ (playbook gobanana-explore); nowhere else does a rough stamp count. */
+const isRoughPath = (f) => /(^|[\\/])design[\\/]gobanana[\\/]roughs[\\/]/.test(f);
 
 if (mode === "loaded") {
   if (/get_playbook$/.test(tool)) { writeSession(input.session_id, { ...session, playbook: true }); installTools(); }
@@ -45,12 +47,20 @@ if (mode === "pre" && tool !== "Write") {
     if (!isUiDraft(f, text, session.design)) continue;
     const mtimeMs = statSync(f).mtimeMs, st = checked[f], fresh = st && st.mtimeMs === mtimeMs, key = `publish:${f}:${mtimeMs}`;
     if (fresh && st.fails === 0) continue;
+    // Round 3 (F24): a rough screen goes out with its FAILs named in measure.openFails, never fixed first. Only a file
+    // under design/gobanana/roughs/ is a rough (review round 3: a rough stamp elsewhere is a normal FAIL); its open
+    // FAILs go to the user in a line.
+    if (fresh && st.rough && isRoughPath(f)) {
+      const ids = failIds(st.summary);
+      if (st.fails > 0) warnings.push(`GoBanana gate: ${f} is a rough screen with ${st.fails} open FAIL(s)${ids.length ? ` (${ids.join(", ")})` : ""}, not a checked draft.`);
+      continue;
+    }
     if (fresh) {
       // A measured FAIL blocks twice: the draft is fixed and measured again. The third try passes with a warning the
       // user sees, so a false FAIL (a misread page) never traps the run.
       const ids = failIds(st.summary), named = ids.length ? ` (${ids.join(", ")})` : "", n = strikes(`fail:${f}:${mtimeMs}`);
       if (n > 2) { warnings.push(`GoBanana gate: ${f} was published with ${st.fails} failing gb-measure check(s)${named} after two blocks. It is not a checked draft.`); continue; }
-      deny(`GoBanana gate: gb-measure found ${st.fails} failing check(s)${named} on ${f} in its last run${st.summary ? ` (${st.summary})` : ""}. A draft with a FAIL is never shown or placed. Fix every FAIL (the accessibility floor: contrast, body 16px, nothing read under 14px, 44px tap targets, no sideways scroll, alt text, visible focus; and the copy), run the render loop's one command again (playbook gobanana-draft/render-loop), then publish.${n === 2 ? " If a FAIL is a false reading (the page is right and the measure misread it), tell the user which FAIL id and why; a third publish goes through with a warning the user sees." : ""}`);
+      deny(`GoBanana gate: gb-measure found ${st.fails} failing check(s)${named} on ${f} in its last run${st.summary ? ` (${st.summary})` : ""}. A draft with a FAIL is never shown or placed (a rough screen only with its FAILs named in measure.openFails). Fix every FAIL (the accessibility floor: contrast, body 16px, nothing read under 14px, 44px tap targets, no sideways scroll, alt text, visible focus; and the copy), run the render loop's one command again (playbook gobanana-draft/render-loop), then publish.${n === 2 ? " If a FAIL is a false reading (the page is right and the measure misread it), tell the user which FAIL id and why; a third publish goes through with a warning the user sees." : ""}`);
     }
     // Unmeasured: blocks twice, then passes with a warning the user sees. gb-measure may have run under another TMPDIR
     // (a sandboxed Bash) or against a URL, so its stamp is out of reach; the run is never trapped.

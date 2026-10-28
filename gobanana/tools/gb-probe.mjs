@@ -1,4 +1,4 @@
-// gb-tools v1: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v2: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // node gb-probe.mjs <url> <outdir>   (the .gb-switch dev chrome is skipped, as gb-measure does)
 // Tabs through the page at 390 and records each stop: ring (focus shows on it, its label, a box around it or a part of it), covered.
 // page.under44: controls under 44x44px at 390 (tap targets), links inside a sentence aside.
@@ -15,7 +15,7 @@ r.reflow320 = await p.evaluate(() => {
     if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(a).overflowX)) return true; return false; };
   const wide = [...document.querySelectorAll('body *')].filter(e => { const x = e.getBoundingClientRect(); return x.width && (x.right > W + 1 || x.left < -1) && !inScroller(e) && !e.closest('table,pre,.gb-switch'); });
   return { scrollsX: document.documentElement.scrollWidth > W, masked: root.some(e => /(hidden|clip)/.test(getComputedStyle(e).overflowX)),
-    wide: wide.slice(0, 6).map(e => e.tagName.toLowerCase() + (e.className ? '.' + e.className : '')) };
+    wide: wide.slice(0, 6).map(e => e.tagName.toLowerCase() + (e.getAttribute('class') ? '.' + e.getAttribute('class') : '')) };
 });
 await p.screenshot({ path: `${out}/probe-320-${tag}.png`, fullPage: true }); await p.close();
 p = await b.newPage({ viewport: { width: 390, height: 844 } });
@@ -55,6 +55,6 @@ for (let i = 0; i < 80; i++) {
 await p.addStyleTag({ content: '*{line-height:1.5!important;word-spacing:.16em!important}p{margin-bottom:2em!important}*{letter-spacing:.12em!important}' });
 r.spacingClipped = await p.evaluate(() => [...document.querySelectorAll('body *')].filter(e => { const s = getComputedStyle(e);
   return /(hidden|clip)/.test(s.overflowX + s.overflowY) && (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1) && !e.matches('.sr-only,.visually-hidden') && e.getBoundingClientRect().height > 1 && !e.closest('[inert],[hidden],[aria-hidden="true"],.gb-switch'); })
-  .slice(0, 6).map(e => e.tagName.toLowerCase() + (e.className ? '.' + e.className : '')));
+  .slice(0, 6).map(e => e.tagName.toLowerCase() + (e.getAttribute('class') ? '.' + e.getAttribute('class') : '')));
 await p.screenshot({ path: `${out}/probe-spacing-${tag}.png`, fullPage: true });
 console.log(JSON.stringify(r, null, 1)); await b.close();
