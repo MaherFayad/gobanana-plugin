@@ -5,7 +5,7 @@ description: Build one GoBanana Frankenstein page into a beautiful, checked scre
 
 # GoBanana build
 
-Plugin 0.7.0. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.7.0, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.7.1. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.7.1, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
@@ -17,4 +17,4 @@ These hold even if get_playbook fails:
 6. The hero's look, every state reachable, one language, WCAG 2.2 AA; never show an unchecked draft.
 7. Place the build on the board (add_to_canvas type "build" with gb-measure's measure) when you can screenshot. End with the canvas web link.
 
-Call get_playbook with name `gobanana-build` and plugin `0.7.0`, and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-build` and plugin `0.7.1`, and follow it exactly; batch the playbooks it names in `more`.

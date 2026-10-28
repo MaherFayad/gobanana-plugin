@@ -5,7 +5,7 @@ description: Finish a picked GoBanana direction into one checked page or screen 
 
 # GoBanana draft
 
-Plugin 0.7.0. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.7.0, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.7.1. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.7.1, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
@@ -17,4 +17,4 @@ These hold even if get_playbook fails:
 6. Must-keeps stay; the mechanic works. Taste only as given or confirmed. The user's named output wins.
 7. Place each draft (add_to_canvas type "build" with measure, fidelity, refsUsed); end with the canvas web link.
 
-Call get_playbook with name `gobanana-draft` and plugin `0.7.0`, and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-draft` and plugin `0.7.1`, and follow it exactly; batch the playbooks it names in `more`.
