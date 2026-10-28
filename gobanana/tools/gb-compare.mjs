@@ -1,5 +1,6 @@
-// gb-compare: do a board's drafts look alike? Each at 1440x900 (default view, &shot=1) per language.
-//   node gb-compare.mjs <a.html|url> <b.html|url> [more] [--tokens a.json[,b.json...]] [--languages ar,en] [--same-direction] [--out dir] [--json]
+// gb-tools v1: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-compare: do a board's drafts look alike? Each at 1440x900 (default view, &shot=1) in its one language.
+//   node gb-compare.mjs <a.html|url> <b.html|url> [more] [--tokens a.json[,b.json...]] [--languages en] [--same-direction] [--out dir] [--json]
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
 
@@ -115,9 +116,11 @@ async function main() {
   const flag = (n) => { const i = args.indexOf('--' + n); if (i < 0) return false; args.splice(i, 1); return true; };
   const list = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean), tokenFiles = list(opt('tokens', '')).map((f) => resolve(f)), langArg = list(opt('languages', '')).map((l) => l.toLowerCase());
   const outDir = resolve(opt('out', join(process.env.TMPDIR || '/tmp', 'gb'))), asJson = flag('json'), sameAll = flag('same-direction'), targets = args;
-  if (targets.length < 2 || (tokenFiles.length > 1 && tokenFiles.length !== targets.length)) { console.error('usage: node gb-compare.mjs <a.html|url> <b.html|url> [more] [--tokens a.json[,b.json...] (one, or one per draft)] [--languages ar,en] [--same-direction] [--out dir] [--json]'); process.exit(2); }
-  const tokens = tokenFiles.map((f) => JSON.parse(readFileSync(f, 'utf8'))), tokenLangs = [...new Set(tokens.flatMap((t) => (Array.isArray(t.languages) ? t.languages : []).map((l) => String(l).toLowerCase())))];
-  const languages = langArg.length ? langArg : tokenLangs.length ? tokenLangs : ['ar', 'en'];
+  if (targets.length < 2 || (tokenFiles.length > 1 && tokenFiles.length !== targets.length)) { console.error('usage: node gb-compare.mjs <a.html|url> <b.html|url> [more] [--tokens a.json[,b.json...] (one, or one per draft)] [--languages en] [--same-direction] [--out dir] [--json]'); process.exit(2); }
+  const tokens = tokenFiles.map((f) => JSON.parse(readFileSync(f, 'utf8')));
+  // ONE language: --languages, else the first draft's tokens language, else English.
+  const tokenFirst = [...new Set(tokens.map((t) => String(t.primaryLanguage || (Array.isArray(t.languages) ? t.languages[0] : '') || '').toLowerCase()).filter(Boolean))];
+  const languages = langArg.length ? langArg.slice(0, 1) : tokenFirst.length ? tokenFirst.slice(0, 1) : ['en'];
   const req = createRequire(import.meta.url);
   let pw; try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); }
   // A draft's name: its file name, or its folder's for index.html.

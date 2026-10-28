@@ -1,4 +1,5 @@
-// GoBanana rules shared by the plugin hooks. Node built-ins only. The two Arabic word lists are the same text as
+// GoBanana rules shared by the plugin hooks: the accessibility floor and content honesty only (owner 2026-10-28), the
+// Arabic copy rules on an Arabic page only. Node built-ins only. The two Arabic word lists are the same text as
 // gb-measure's (playbook gobanana-draft/check-scripts); a server test keeps them equal.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -47,7 +48,7 @@ export function gbDirs() {
 }
 /**
  * Copies the check scripts the plugin ships (tools/gb-*.mjs) into every gb folder, so the playbooks'
- * `[ -f "$T/gb-measure.mjs" ] || curl ...` finds them and never fetches code (some hosts block that).
+ * `grep -qs "^// gb-tools vN:" "$T/gb-measure.mjs" || curl ...` finds them and never fetches code (some hosts block that).
  * Writes only a file that differs. Returns how many files it wrote; never throws.
  */
 export function installTools(root = process.env.CLAUDE_PLUGIN_ROOT || join(dirname(fileURLToPath(import.meta.url)), "..")) {
@@ -107,15 +108,26 @@ export function isUiDraft(path, text, designSession) {
   return !!designSession && /<(button|input|nav|main)\b/i.test(text);
 }
 
+/**
+ * True when the page's language is Arabic: <html lang="ar...">, or an element in it set lang="ar". Owner 2026-10-28:
+ * drafts are in one language, English by default; the Arabic copy rules apply only to an Arabic page.
+ */
+export function arabicPage(text) {
+  const t = String(text || "");
+  return /<html\b[^>]*\blang\s*=\s*["']?ar\b/i.test(t) || /\slang\s*=\s*["']ar(?:-[a-z]+)?["']/i.test(t);
+}
+
 /** Static copy checks on an HTML file's source (its markup and script strings both hold copy). Returns FAIL lines. */
 export function copyFindings(text, ui) {
   const out = [], src = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ");
-  for (const [id, list, what] of [["ar-register", AR_SLANG, "dialect words; GoBanana copy is Gulf MSA"], ["ar-loanword", AR_LOAN, "English spelled in Arabic letters; use the Arabic word"]]) {
-    const hits = [...new Set([...src.matchAll(arWord(list))].map((m) => m[1]))];
-    if (hits.length) out.push(`FAIL ${id}: ${what}: ${hits.slice(0, 8).join("، ")}`);
+  if (arabicPage(text)) {
+    for (const [id, list, what] of [["ar-register", AR_SLANG, "dialect words; GoBanana copy is Gulf MSA"], ["ar-loanword", AR_LOAN, "English spelled in Arabic letters; use the Arabic word"]]) {
+      const hits = [...new Set([...src.matchAll(arWord(list))].map((m) => m[1]))];
+      if (hits.length) out.push(`FAIL ${id}: ${what}: ${hits.slice(0, 8).join("، ")}`);
+    }
+    if (/[ً-ٰٟ]/.test(src)) out.push("FAIL ar-diacritics: Arabic diacritics in the copy; write without them");
+    if (/[٠-٩۰-۹]/.test(src)) out.push("FAIL eastern-digits: Eastern Arabic digits; use 0 to 9");
   }
-  if (/[ً-ٰٟ]/.test(src)) out.push("FAIL ar-diacritics: Arabic diacritics in the copy; write without them");
-  if (/[٠-٩۰-۹]/.test(src)) out.push("FAIL eastern-digits: Eastern Arabic digits; use 0 to 9");
   if (!ui) return out;
   if (/[–—]/.test(src)) out.push("FAIL dash: an em or en dash in the copy; use a comma, a colon, a full stop or \"to\"");
   if (/lorem ipsum|dolor sit amet|John Doe|Jane Doe|\bAcme\b/i.test(src)) out.push("FAIL placeholder: lorem ipsum, John Doe or Acme; use the product's real content");
@@ -125,9 +137,6 @@ export function copyFindings(text, ui) {
   return out;
 }
 
-/** Families that set Arabic; they count apart from the Latin ones (at most 2 families per script). */
-export const ARABIC_FAMILY = /arab|naskh|kufi|ruqaa|tajawal|cairo|almarai|amiri|lateef|harmattan|reem|readex|changa(?!\s*one)|messiri|markazi|scheherazade|vazir|lalezar|mirza|rakkas|aref|jomhuria|blaka|bhaijaan|thmanyah|alexandria|marhey|\bmada\b|zain\b/i;
-const GENERIC_FAMILY = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-serif|ui-sans-serif|ui-monospace|ui-rounded|math|emoji|fangsong|inherit|initial|unset|revert|revert-layer|-apple-system|blinkmacsystemfont|segoe ui|roboto|helvetica neue|helvetica|arial)$/i;
 const KEYWORD_PX = { "xx-small": 9, "x-small": 10, small: 13 };
 
 /** The CSS of an HTML file: its style blocks and inline style attributes, each as [selector, declarations, media]. */
@@ -148,16 +157,16 @@ function cssRules(text) {
 /** Every declaration of one property ("font-size") in a block. */
 const decls = (body, prop) => [...body.matchAll(new RegExp(`(?:^|[;{\\s])${prop}\\s*:\\s*([^;}]+)`, "gi"))].map((m) => m[1].replace(/!important/i, "").trim());
 
-/** Fine print and drawings may sit under 14px (the 10% small-share allowance): small, .legal, .fine, footer small, svg. */
+/** Rules this static check leaves to gb-measure, which reads the rendered size: small, .legal, .fine, svg text. */
 const FINE_PRINT = /^(?:.*[\s>+~])?(?:small|svg|tspan|text)(?:[.:#[].*)?$|\.(?:legal|fine)(?![\w-])|(?:^|[\s>+~])svg(?![\w-])/i;
 const finePrint = (sel) => sel.split(",").every((part) => FINE_PRINT.test(part.trim()));
-/** Rules under 14px that make a FAIL; fewer is a WARN (the page may set up to 10% of its characters small). */
+/** Rules under 14px that make a FAIL; fewer is a WARN (a rule may go unused; gb-measure fails any text read under 14px). */
 export const SMALL_RULES_FAIL = 3;
 
 /**
- * Static layout checks on an HTML draft's CSS: rules with a font-size under 14px (px, rem at a 16px root, or a small
- * keyword, custom properties resolved; fine print and svg aside), 3 or more FAIL and fewer WARN, and more than
- * 2 font families per script. Returns FAIL and WARN lines.
+ * Static checks on an HTML draft's CSS against the accessibility floor: rules with a font-size under 14px (px, rem at a
+ * 16px root, or a small keyword, custom properties resolved; fine print and svg aside), 3 or more FAIL and fewer WARN.
+ * Owner 2026-10-28: no font family cap, no style rule. Returns FAIL and WARN lines.
  */
 export function layoutFindings(text) {
   const out = [], rules = cssRules(String(text || "")).filter(([sel, , media]) => !/gb-switch/.test(sel) && !/\bprint\b/.test(media));
@@ -179,17 +188,7 @@ export function layoutFindings(text) {
     const under = sizes.find((s) => { const n = lowest(s); return n !== null && n > 0 && n < 14; });
     if (under) small.push(`${sel.replace(/\s+/g, " ").slice(0, 40)} ${under.trim().slice(0, 30)}`);
   }
-  if (small.length) out.push(`${small.length >= SMALL_RULES_FAIL ? "FAIL" : "WARN"} small-font: ${small.length} rule(s) set type under 14px (16px root): ${small.slice(0, 4).join("; ")}; data and labels are 14px or more, body 16px (17px Arabic); only fine print (small, .legal, .fine) goes smaller`);
-  const families = new Set();
-  for (const [, body] of rules) {
-    const stacks = [...decls(body, "font-family"), ...decls(body, "font").map((f) => (resolveVar(f).match(/[\d.]+(?:px|rem|em|%)(?:\s*\/\s*[\w.%]+)?\s+(.+)$/i) || [])[1]).filter(Boolean)];
-    for (const st of stacks) {
-      const first = resolveVar(st).split(",")[0].replace(/["']/g, "").trim();
-      if (first && !GENERIC_FAMILY.test(first) && !/^var\(/.test(first)) families.add(first);
-    }
-  }
-  const arabic = [...families].filter((f) => ARABIC_FAMILY.test(f)), latin = [...families].filter((f) => !ARABIC_FAMILY.test(f));
-  for (const [what, list] of [["Latin", latin], ["Arabic", arabic]]) if (list.length > 2) out.push(`FAIL font-families: ${list.length} ${what} font families (${list.join(", ")}); 2 at most per script: one for display, one for text`);
+  if (small.length) out.push(`${small.length >= SMALL_RULES_FAIL ? "FAIL" : "WARN"} small-font: ${small.length} rule(s) set type under 14px (16px root): ${small.slice(0, 4).join("; ")}; nothing read goes under 14px, body 16px (17px Arabic)`);
   return out;
 }
 

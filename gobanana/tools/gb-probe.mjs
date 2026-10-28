@@ -1,5 +1,7 @@
+// gb-tools v1: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // node gb-probe.mjs <url> <outdir>   (the .gb-switch dev chrome is skipped, as gb-measure does)
 // Tabs through the page at 390 and records each stop: ring (focus shows on it, its label, a box around it or a part of it), covered.
+// page.under44: controls under 44x44px at 390 (tap targets), links inside a sentence aside.
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { join } from 'node:path';
 const req = createRequire(import.meta.url); let pw; try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); }
 const { chromium } = pw;
@@ -26,7 +28,8 @@ r.page = await p.evaluate(() => {
     headingSkips: lv.filter((l, i) => i && l > lv[i - 1] + 1).length,
     unlabelled: q('input:not([type=hidden]),select,textarea').filter(e => !named(e)).map(e => e.name || e.type),
     noAutocomplete: q('input[type=email],input[type=tel],input[type=password],input[name*=name i],input[name*=phone i],input[name*=card i]').filter(e => !e.getAttribute('autocomplete')).map(e => e.name || e.type),
-    under24: q('a,button,input,select,textarea,[role=button],[tabindex="0"]').filter(e => { const x = e.getBoundingClientRect(); return x.width && (x.width < 24 || x.height < 24) && !e.closest('p'); }).map(e => e.tagName.toLowerCase() + ' ' + (e.textContent || e.name || '').trim().slice(0, 20)),
+    // Tap targets on the phone are 44px (the floor at 390), not WCAG's 24px desktop minimum.
+    under44: q('a,button,input,select,textarea,[role=button],[tabindex="0"]').filter(e => { const x = e.getBoundingClientRect(); return x.width && (x.width < 44 || x.height < 44) && !e.closest('p'); }).map(e => e.tagName.toLowerCase() + ' ' + (e.textContent || e.name || '').trim().slice(0, 20)),
     liveRegions: q('[aria-live],[role=status],[role=alert]').length,
     unnamedDialogs: q('dialog,[role=dialog],[role=alertdialog]').filter(d => !d.getAttribute('aria-labelledby') && !d.getAttribute('aria-label')).length };
 });

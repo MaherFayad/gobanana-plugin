@@ -1,13 +1,14 @@
+// gb-tools v1: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-spread: are these concepts really different? Where text, panels and media sit on each first screen.
-//   node gb-spread.mjs <a.html|url> <b.html|url> [more] [--lang ar] [--w 1440 --h 900] [--max 0.7] [--json]
+//   node gb-spread.mjs <a.html|url> <b.html|url> [more] [--lang en] [--w 1440 --h 900] [--max 0.7] [--json]
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process';
 import { basename, join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i < 0 ? d : args.splice(i, 2)[1]; };
 const flag = (n) => { const i = args.indexOf('--' + n); if (i < 0) return false; args.splice(i, 1); return true; };
-const lang = opt('lang', 'ar'), W = +opt('w', 1440), H = +opt('h', 900), MAX = +opt('max', 0.7), asJson = flag('json'), targets = args;
-if (targets.length < 2) { console.error('usage: node gb-spread.mjs <a.html|url> <b.html|url> [more] [--lang ar] [--max 0.7] [--json]'); process.exit(2); }
+const lang = opt('lang', 'en'), W = +opt('w', 1440), H = +opt('h', 900), MAX = +opt('max', 0.7), asJson = flag('json'), targets = args;
+if (targets.length < 2) { console.error('usage: node gb-spread.mjs <a.html|url> <b.html|url> [more] [--lang en] [--max 0.7] [--json]'); process.exit(2); }
 const req = createRequire(import.meta.url);
 let pw; try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); }
 
@@ -56,8 +57,6 @@ for (let i = 0; i < ok.length; i++) for (let j = i + 1; j < ok.length; j++) pair
 pairs.sort((x, y) => y.s - x.s);
 const same = pairs.filter((p) => p.s >= MAX);
 for (const p of same) out.push(`FAIL same-skeleton: ${p.a} and ${p.b} put text and panels in the same places (${p.s.toFixed(2)}, max ${MAX}); change the mechanic and the layout, not the ornament`);
-const dark = ok.filter((r) => r.groundLum < 0.03);
-if (ok.length >= 3 && dark.length > Math.ceil(ok.length / 2)) out.push(`WARN dark-default: ${dark.length} of ${ok.length} concepts sit on a near black ground; the taste words decide the ground, not the dark dashboard default`);
 if (ok.length >= 3 && new Set(ok.map((r) => r.ground)).size === 1) out.push(`WARN one-ground: every concept sits on ${ok[0].ground}`);
 for (const r of res.filter((r) => r.error)) out.push(`FAIL ${r.name}: ${r.error}`);
 if (asJson) console.log(JSON.stringify({ pairs, concepts: ok.map(({ name, ground, groundLum }) => ({ name, ground, groundLum })), findings: out }, null, 1));

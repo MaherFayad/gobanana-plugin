@@ -1,20 +1,27 @@
+// gb-tools v1: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-shoot: every render-loop shot in one browser, 4 pages at a time, and contact sheets of state shots.
-//   node gb-shoot.mjs <file.html|url> [--ar <url> --en <url>] [--out <dir>] [--tokens tokens.json] [--languages ar,en] [--states empty,loading,error] [--lang ar] [--variants 3]
+//   node gb-shoot.mjs <file.html|url> [--en <url>] [--out <dir>] [--tokens tokens.json] [--languages en] [--states empty,loading,error] [--no-worst] [--landing] [--variants 3]
+// ONE language: --languages, else the tokens' language, else the page's <html lang>, else English. States are shot only
+// when --states names them; ?data=worst unless --no-worst or a landing page (tokens.landing or --landing).
+// upload-<lang>-full.jpg: the whole page at 1440, scaled to at most 2000px tall and under the 3 MB board cap; a landing uploads it.
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
 
 const args = process.argv.slice(2);
 const opt = (n) => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; };
+const flag = (n) => { const i = args.indexOf('--' + n); if (i < 0) return false; args.splice(i, 1); return true; };
 const urlFor = { ar: opt('ar'), en: opt('en') }, tp = opt('tokens'), tokens = tp ? JSON.parse(readFileSync(tp, 'utf8')) : null;
 const list = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const langArg = list(opt('languages')), tokenLangs = Array.isArray(tokens?.languages) ? list(tokens.languages.join(',')) : [];
-const languages = [...new Set(langArg.length ? langArg : tokenLangs.length ? tokenLangs : ['ar', 'en'])];
-const out = resolve(opt('out') || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), asked = opt('lang'), first = asked && languages.includes(asked) ? asked : languages[0];
-const order = [first, ...languages.filter((l) => l !== first)], others = order.slice(1);
-const variants = Number(opt('variants') || 0), target = args[0];
-if (!target && !languages.every((l) => urlFor[l])) { console.error('usage: node gb-shoot.mjs <file.html|url> [--out dir] [--tokens tokens.json] [--languages ar,en] [--states empty,loading,error] [--lang ar] [--variants 3]'); process.exit(2); }
+const langGiven = langArg.length > 0 || !!tokens?.primaryLanguage || tokenLangs.length > 0;
+let languages = [...new Set(langArg.length ? langArg : [String(tokens?.primaryLanguage || tokenLangs[0] || 'en').toLowerCase()])];
+const noWorst = flag('no-worst'), landing = flag('landing') || tokens?.landing === true;
+const out = resolve(opt('out') || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), asked = opt('lang');
+const variants = Number(opt('variants') || 0), statesArg = opt('states'), target = args[0];
+if (!target && !languages.every((l) => urlFor[l])) { console.error('usage: node gb-shoot.mjs <file.html|url> [--out dir] [--tokens tokens.json] [--languages en] [--states empty,loading,error] [--no-worst] [--landing] [--variants 3]'); process.exit(2); }
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
-const SELF = ['default', 'idle'], ACT = ['hover', 'focus', 'focus-visible', 'active', 'pressed', 'moving', 'dragging'], allStates = [...new Set([...(opt('states') || '').split(','), ...(tokens?.mechanic?.states || [])].map(kebab).filter(Boolean))];
+// Only the states asked with --states (review 2026-10-28: the tokens' states were shot, then FAILed as not wired, on pages that have none).
+const SELF = ['default', 'idle'], ACT = ['hover', 'focus', 'focus-visible', 'active', 'pressed', 'moving', 'dragging'], allStates = [...new Set((statesArg || '').split(',').map(kebab).filter(Boolean))];
 const states = allStates.filter((s) => !SELF.includes(s) && !ACT.includes(s)), itemStates = new Set((Array.isArray(tokens?.mechanic?.itemStates) ? tokens.mechanic.itemStates : []).map(kebab));
 const req = createRequire(import.meta.url);
 let pw; try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); }
@@ -28,6 +35,14 @@ const url = (lang, params) => {
   u.searchParams.set('shot', '1'); return u.href;
 };
 const browser = await pw.chromium.launch(), failed = [], figFails = [];
+// No --languages and no tokens: the page's own <html lang> is the one language.
+if (!langGiven && target) try { const [fp, q] = target.split('?'), p = await browser.newPage(); await p.goto(/^https?:|^file:/.test(target) ? target : pathToFileURL(resolve(fp)).href + (q ? '?' + q : ''), { waitUntil: 'load' }); const l = (await p.evaluate(() => document.documentElement.lang || '')).trim().toLowerCase().split(/[-_]/)[0]; await p.close(); if (/^[a-z]{2,3}$/.test(l)) languages = [l]; } catch {}
+const first = asked && languages.includes(asked) ? asked : languages[0], order = [first, ...languages.filter((l) => l !== first)], others = order.slice(1);
+// The whole page as one JPEG for the board: at most 2000px tall (narrower when the page is long) and under 3 MB, 900 KB when it can.
+const MAX_H = 2000, CAP = 3 * 1024 * 1024;
+const fullJpeg = async (png) => { const w = png.readUInt32BE(16), h = png.readUInt32BE(20), k = Math.min(1, MAX_H / h), tw = Math.max(1, Math.round(w * k)), th = Math.max(1, Math.round(h * k)), p = await browser.newPage();
+  try { const b64 = await p.evaluate(async ({ src, tw, th }) => { const img = new Image(); img.src = src; await img.decode(); const c = Object.assign(document.createElement('canvas'), { width: tw, height: th }), x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, tw, th); for (const q of [0.82, 0.72, 0.62, 0.5]) { const d = c.toDataURL('image/jpeg', q).split(',')[1]; if (d.length * 0.75 <= 900 * 1024 || q === 0.5) return d; } }, { src: 'data:image/png;base64,' + png.toString('base64'), tw, th });
+    return { jpg: Buffer.from(b64, 'base64'), w: tw, h: th }; } finally { await p.close(); } };
 // The 390 default view first: marker states, one marker of each, the hero figure.
 const FIGURE = ({ px = 0, list = [] } = {}) => {
   const vis = (e) => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width >= 1 && r.height >= 1 && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && !e.closest('[hidden],.gb-switch'); };
@@ -45,10 +60,10 @@ for (const id of probe.named) itemStates.add(kebab(id));
 const isItem = (s) => itemStates.has(s) || !!probe.markers[s], markerStates = states.filter((s) => isItem(s) && probe.markers[s]);
 const shots = [];
 for (const lang of order) for (const [w, h] of [[390, 844], [1440, 900]]) shots.push({ file: `view-${lang}-${w}`, lang, w, h, params: {}, upload: `upload-${lang}-${w}.jpg` });
-for (const lang of order) shots.push({ file: `full-${lang}-390`, lang, w: 390, h: 844, params: {}, full: true });
+for (const lang of order) for (const [w, h] of [[390, 844], [1440, 900]]) shots.push({ file: `full-${lang}-${w}`, lang, w, h, params: {}, full: true, ...(w === 1440 ? { fullUpload: `upload-${lang}-full.jpg` } : {}) });
 for (const s of states.filter((x) => !markerStates.includes(x))) shots.push({ file: `state-${s}`, lang: first, w: 390, h: 844, params: { state: s }, sheet: true, item: isItem(s) });
 for (const s of markerStates) shots.push({ file: `marker-${s}`, lang: first, w: 390, h: 844, params: {}, marker: probe.markers[s] });
-shots.push({ file: 'worst', lang: first, w: 390, h: 844, params: { data: 'worst' }, sheet: true });
+if (!noWorst && !landing) shots.push({ file: 'worst', lang: first, w: 390, h: 844, params: { data: 'worst' }, sheet: true });
 if (states.includes('error')) for (const lang of others) shots.push({ file: `state-error-${lang}`, lang, w: 390, h: 844, params: { state: 'error' }, sheet: true });
 for (let v = 1; v <= variants; v++) for (const lang of order) shots.push({ file: `v${v}-${lang}-390`, lang, w: 390, h: 844, params: { v: String(v) } });
 
@@ -62,6 +77,7 @@ const take = async (s) => {
     // A change can sit below the fold: compare the full page too.
     if (s.sheet) s.fullPng = await page.screenshot({ fullPage: true });
     if (s.upload) for (const quality of [82, 72, 62, 50]) { const jpg = await page.screenshot({ type: 'jpeg', quality }); if (jpg.length <= 900 * 1024 || quality === 50) { writeFileSync(join(out, s.upload), jpg); s.jpgKB = Math.round(jpg.length / 1024); break; } }
+    if (s.fullUpload) { const f = await fullJpeg(s.png); writeFileSync(join(out, s.fullUpload), f.jpg); s.fullKB = Math.round(f.jpg.length / 1024); s.fullSize = `${f.w}x${f.h}`; }
   } catch (e) { failed.push(`${s.file}: ${String(e.message || e).split('\n')[0]}`); s.missing = true; } finally { await page.close(); }
 };
 for (let i = 0; i < shots.length; i += 4) await Promise.all(shots.slice(i, i + 4).map(take));
@@ -88,13 +104,18 @@ const ok = shots.filter((s) => !s.missing), path = (f) => join(out, f + '.png');
 console.log(`${ok.length} of ${shots.length} shots in ${out}`);
 console.log('Look at each: ' + ok.filter((s) => !s.sheet && !s.marker).map((s) => path(s.file)).join(' '));
 for (const s of sheets) console.log(`Sheet ${path(s.file)}: ${s.holds.join(', ')}`);
-const ups = ok.filter((s) => s.upload && s.jpgKB); if (ups.length) console.log(`Upload to the board (get_upload_link): ${ups.map((s) => `${join(out, s.upload)} (${s.jpgKB} KB)`).join(' ')}; the platform's main size, default language first`);
-for (const s of ups.filter((x) => x.jpgKB > 900)) console.log(`WARN ${s.upload} is ${s.jpgKB} KB, over the 900 KB get_snapshot can show; the board still takes it (3 MB), but nobody can look at it there`);
+const ups = ok.filter((s) => s.upload && s.jpgKB), fulls = ok.filter((s) => s.fullUpload && s.fullKB);
+if (landing && fulls.length) console.log(`Upload to the board (get_upload_link): ${fulls.map((s) => `${join(out, s.fullUpload)} (${s.fullKB} KB)`).join(' ')}; a landing page places its whole page`);
+else if (ups.length) console.log(`Upload to the board (get_upload_link): ${ups.map((s) => `${join(out, s.upload)} (${s.jpgKB} KB)`).join(' ')}; the platform's main size first`);
+if (!landing) for (const s of fulls) console.log(`Whole page at 1440: ${join(out, s.fullUpload)} (${s.fullSize}, ${s.fullKB} KB)`);
+for (const s of [...(landing ? [] : ups), ...(landing ? fulls : [])]) { const kb = s.fullKB ?? s.jpgKB, f = s.fullUpload ?? s.upload; if (kb * 1024 > CAP) console.log(`WARN ${f} is ${kb} KB, over the board's 3 MB: it will be refused; shoot a shorter page`); else if (kb > 900) console.log(`WARN ${f} is ${kb} KB, over the 900 KB get_snapshot can show; the board still takes it (3 MB), but nobody can look at it there`); }
 const self = allStates.filter((s) => SELF.includes(s)), act = allStates.filter((s) => ACT.includes(s));
 if (self.length || act.length) console.log(`Not shot: ${[self.length ? `${self.join(', ')} (the default view itself)` : '', act.length ? `${act.join(', ')} (interaction states one element takes under a pointer, a key or a drag, not page states behind ?state=: gb-probe shows focus, look at the rest by hand)` : ''].filter(Boolean).join('; ')}`);
 // A marker state no element showed: shot as a page state, never failed as unchanged.
 const base = (lang) => ok.find((s) => s.file === `full-${lang}-390`)?.png;
-const same = ok.filter((s) => s.sheet && s.fullPng && base(s.lang)?.equals(s.fullPng)), wired = same.filter((s) => !s.item).map((s) => s.file);
+const same = ok.filter((s) => s.sheet && s.fullPng && base(s.lang)?.equals(s.fullPng)), wired = same.filter((s) => !s.item && s.file !== 'worst').map((s) => s.file);
+// ?data=worst was not asked for: an unwired one is said, never FAILed (--no-worst on a page with no data).
+if (same.some((s) => s.file === 'worst')) console.log('WARN worst: ?data=worst looks like the default view; wire worst case data behind it (long names, big numbers, empty fields), or pass --no-worst on a page with no data (a landing page, a rough screen)');
 for (const s of same.filter((x) => x.item)) console.log(`WARN ${s.file}: a marker state no element of the default view shows (data-status="${s.params.state}"); its page shot looks like the default view`);
 if (wired.length) console.log(`FAIL same as the default view, so the switch is not wired: ${wired.join(', ')}`);
 for (const f of figFails) console.log(`FAIL hero-figure: ${f}; show a placeholder while loading; on error say what failed and grey the last known figure with its time beside it ("as of 09:40", or data-stale on its wrapper), never a bare stale number or a dash`);
