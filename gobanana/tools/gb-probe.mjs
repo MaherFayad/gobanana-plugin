@@ -37,7 +37,7 @@ for (let i = 0; i < 80; i++) {
     const e = document.activeElement; if (!e || e === document.body || e.dataset.gbSeen) return null; e.dataset.gbSeen = 1;
     if (e.closest('.gb-switch')) return { skip: true };
     const x = e.getBoundingClientRect(), s = getComputedStyle(e);
-    // Focus rules that paint something on the stop, a box around it or a part of it (selector parts with :focus only).
+    // :focus rules that paint the stop, a box around it or a part of it.
     const PAINT = /outline|box-shadow|border|background|stroke|fill|opacity|transform|filter|text-decoration|color|visibility|display/;
     const parts = (sel) => { const out = []; let d = 0, cur = ''; for (const ch of sel) { if (ch === '(') d++; if (ch === ')') d--; if (ch === ',' && !d) { out.push(cur); cur = ''; } else cur += ch; } return [...out, cur].map((p) => p.trim()).filter((p) => /:focus/.test(p)); };
     const rules = (list) => { const o = []; for (const r of list) { if (r.cssRules && (!r.media || matchMedia(r.media.mediaText).matches) && !(r instanceof CSSStyleRule)) o.push(...rules(r.cssRules)); if (r instanceof CSSStyleRule && /:focus/.test(r.selectorText)) o.push(r); } return o; };

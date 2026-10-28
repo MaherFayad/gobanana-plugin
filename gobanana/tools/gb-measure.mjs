@@ -1,7 +1,7 @@
-// gb-measure: render a draft at 390 and 1440 in each language, measure craft and restraint numbers, print FAIL and WARN.
+// gb-measure: render a draft at 390 and 1440 per language, measure it, print FAIL and WARN.
 //   node gb-measure.mjs <file.html|url> [--ar <url> --en <url>] [--tokens tokens.json] [--languages ar,en] [--out <dir>]
 //     [--work] [--phone] [--states loading,error] [--taste-allows micro-labels] [--json]
-// The flags, the budgets and every check with its FAIL and WARN: playbook gobanana-draft/measure-script.
+// Flags, budgets and checks: playbook gobanana-draft/measure-script.
 // Adapted from taste-skill scripts/inspect.mjs and scripts/lib/rules.mjs (MIT, github.com/Leonxlnx/taste-skill).
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url'; import { inflateSync } from 'node:zlib';
@@ -13,8 +13,9 @@ const tp = opt('tokens'), tokens = tp ? JSON.parse(readFileSync(tp, 'utf8')) : n
 const urlFor = { ar: opt('ar'), en: opt('en') }, outDir = opt('out'), list = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const langArg = list(opt('languages')), tokenLangs = Array.isArray(tokens?.languages) ? list(tokens.languages.join(',')) : [];
 const languages = [...new Set(langArg.length ? langArg : tokenLangs.length ? tokenLangs : ['ar', 'en'])];
-const allow = [...list(opt('taste-allows')), ...(Array.isArray(tokens?.tasteAllows) ? tokens.tasteAllows.map(String) : [])];
-const work = flag('work'), asJson = flag('json'), dense = tokens?.density?.level === 'dense', phoneFirst = flag('phone') || /mobile|phone|ios|android/i.test(String(tokens?.platform || ''));
+const ta = []; for (let v; (v = opt('taste-allows')) !== null;) ta.push(v);
+const allow = [...list(ta.join(',')), ...(Array.isArray(tokens?.tasteAllows) ? tokens.tasteAllows.map(String) : [])];
+const work = flag('work'), asJson = flag('json'), dense = tokens?.density?.budget ? tokens.density.budget === 'dense' : tokens?.density?.level === 'dense', onPhone = /mobile|phone|ios|android/i.test(String(tokens?.platform || '')), phoneFirst = flag('phone') || onPhone;
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 const stateIds = list(opt('states')).map(kebab).filter((s) => !/^(default|idle|hover|focus|focus-visible|active|pressed|moving|dragging)$/.test(s)), target = args[0];
 const hazeOk = /gradient|aurora|glow|haze|mesh|neon|bloom|iridescen|holograph/i.test([].concat(tokens?.taste ?? [], tokens?.groundCss ?? '').map((x) => x?.word ?? x).join(' ')) || allow.includes('ground-haze');
@@ -23,18 +24,19 @@ const scale = String(tokens?.look?.scale || '').toLowerCase() || null;
 const heroFigure = !!heroFigurePx || (Array.isArray(tokens?.heroDevices) ? tokens.heroDevices : []).some((d) => String(d?.id ?? d) === 'hero-figure');
 const figureAsked = !!heroFigurePx || !!tokens?.mechanic?.figure; // the tokens name an answer figure
 const heroAsked = figureAsked || !!tokens?.mechanic?.signature; // asks for one [data-viz] hero object
+const landing = (tokens?.landing ?? (/landing|home|launch|marketing|product page/i.test(String(tokens?.page || '')) || tokens?.type?.h1Role === 'headline')) === true || onPhone; // the server's landing rule (tokens saved before it: the old page rule)
 if (!target && !languages.every((l) => urlFor[l])) { console.error('usage: node gb-measure.mjs <file.html|url> [--tokens tokens.json] [--languages ar,en] [--out dir] [--work] [--phone] [--states loading,error] [--taste-allows micro-labels] [--json]'); process.exit(2); }
 const fam = (f) => String(f).split(',')[0].replace(/["']/g, '').trim();
 const tokenFonts = Object.entries(tokens?.fonts || {}).filter(([, f]) => f).map(([k, f]) => [k, fam(f)]), fonts = [...new Set([...tokenFonts.map(([, f]) => f), ...(tokens?.type?.figureFamily ? [fam(tokens.type.figureFamily)] : [])])];
-// On-token: tokens.colors, the picked sketch stage, the hero object's surface and ink, the glass fills.
+// On-token: colors, stage, object surface and ink, glass fills.
 const glass = tokens?.material?.glass || {}, colors = [...Object.values(tokens?.colors || {}), ...Object.values(tokens?.stage || {}), tokens?.object?.surface, tokens?.object?.ink, glass.panel, glass.panelSolid, glass.backdrop?.color].filter((c) => /^#[0-9a-f]{6}$/i.test(c || ''));
 const req = createRequire(import.meta.url), gbDir = join(process.env.TMPDIR || '/tmp', 'gb'), noRender = join(gbDir, '.gb-norender');
-// No browser here: mark the machine (the plugin's publish gate reads .gb-norender) and stop. A browser that starts clears the mark.
+// No browser: mark the machine (.gb-norender, read by the publish gate) and stop.
 const cannot = (e) => { try { mkdirSync(gbDir, { recursive: true }); writeFileSync(noRender, `${new Date().toISOString()} ${String(e?.message || e).split('\n')[0]}\n`); } catch {} console.error(`This machine cannot render: ${String(e?.message || e).split('\n')[0]}\nMarked ${noRender}. Show the draft only with every visual item "not checked".`); process.exit(3); };
 let pw; try { try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); } } catch (e) { cannot(e); }
 
-// Runs inside the page; pasted alone into Playwright MCP browser_evaluate as measure-script says.
-function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense = false, heroFigure = false, display = null, heroFigurePx = null, scale = null, hazeOk = false, figureAsked = false, heroAsked = false }) {
+// Runs in the page (or pasted alone into browser_evaluate).
+function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense = false, heroFigure = false, display = null, heroFigurePx = null, scale = null, hazeOk = false, figureAsked = false, heroAsked = false, landing = false }) {
   const gcs = (e, p) => getComputedStyle(e, p), bcr = (e) => e.getBoundingClientRect(), qsa = (q) => document.body.querySelectorAll(q), qda = (q) => document.querySelectorAll(q);
   const W = innerWidth, H = innerHeight, SY = scrollY, mobile = W < 640, out = [], add = (level, id, msg) => out.push({ level, id, msg });
   const html = document.documentElement, ar = /^ar/.test(html.lang), rtl = gcs(html).direction === 'rtl', advice = '; advice only: the picked composition wins where they clash';
@@ -47,7 +49,7 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   const clip = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 40);
   const vis = (e) => { const r = bcr(e); return r.width >= 1 && r.height >= 1 && gcs(e).visibility !== 'hidden'; };
   const txtOf = (e) => String(e?.innerText ?? e?.textContent ?? ''), cls = (e) => String(e?.getAttribute?.('class') || '');
-  // Visually hidden (sr-only): clipped, a 1px box, or far off screen.
+  // sr-only: clipped, 1px, or far off screen.
   const srMemo = new Map(), srOnly = (el) => {
     if (!el || el === document.body || el === html || !(el instanceof Element)) return false; if (srMemo.has(el)) return srMemo.get(el);
     const cs = gcs(el), r = bcr(el), n = (cs.clip.match(/rect\(([^)]*)\)/)?.[1] || '').split(/[\s,]+/).map(parseFloat), ab = /absolute|fixed/.test(cs.position);
@@ -56,25 +58,25 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   };
   // The outermost fixed or sticky box around an element, or null.
   const pinMemo = new Map(), pinned = (el) => { if (!el || el === html || el === document.body) return null; if (pinMemo.has(el)) return pinMemo.get(el); const p = gcs(el).position, v = pinned(el.parentElement) || (p === 'fixed' || p === 'sticky' ? el : null); pinMemo.set(el, v); return v; };
-  // A window the content moves in: a box that scrolls, or a pan surface; picture: svg and canvas count too.
+  // A box that scrolls or pans; picture: svg and canvas too.
   const panMemo = new Map(), panBox = (a) => { if (panMemo.has(a)) return panMemo.get(a); const cs = gcs(a), b = bcr(a);
     const v = (/auto|scroll/.test(cs.overflowX) && a.scrollWidth > a.clientWidth + 1) || (/auto|scroll/.test(cs.overflowY) && a.scrollHeight > a.clientHeight + 1) || a.matches('[data-pan],[data-viz],[role=application]') || /grab|move/.test(cs.cursor) || cs.touchAction === 'none'
       || (/hidden|clip/.test(cs.overflowX + cs.overflowY) && [...a.children].some((k) => { const r = bcr(k); return r.width > b.width * 1.2 + 4 || r.height > b.height * 1.2 + 4; }));
     panMemo.set(a, v); return v; };
   const moving = (el, picture) => { for (let a = el.parentElement; a && a !== document.body && a !== html; a = a.parentElement) if (panBox(a) || (picture && a.matches('svg,canvas'))) return a; return null; };
-  // The first screen: the viewport, cut by every scrolling or clipping box around the element.
+  // The first screen, cut by every clipping box around the element.
   const clips = new Map(), clipOf = (el) => { if (!el || el === html || el === document.body) return { top: 0, left: 0, bottom: H, right: W }; if (clips.has(el)) return clips.get(el); const cs = gcs(el); let c = cs.position === 'fixed' ? { top: 0, left: 0, bottom: H, right: W } : clipOf(el.parentElement); if (/(hidden|auto|scroll|clip)/.test(cs.overflowX + cs.overflowY)) { const b = bcr(el); c = { top: Math.max(c.top, b.top), left: Math.max(c.left, b.left), bottom: Math.min(c.bottom, b.bottom), right: Math.min(c.right, b.right) }; } clips.set(el, c); return c; };
   const onFirst = (r, el) => { const c = clipOf(el.parentElement); return r.width >= 1 && r.height >= 1 && r.top < c.bottom - 1 && r.bottom > c.top + 1 && r.left < c.right - 1 && r.right > c.left + 1; };
   const opac = (e) => { let o = 1; for (let p = e; p && p !== html; p = p.parentElement) o *= +gcs(p).opacity; return o; };
   const bgOf = (e) => { const st = []; for (let p = e; p; p = p.parentElement) { const cs = gcs(p); if (cs.backdropFilter && cs.backdropFilter !== 'none' && rgba(cs.backgroundColor)[3] < 0.95) return null; if (cs.backgroundImage !== 'none') return null; const c = rgba(cs.backgroundColor); if (c[3] > 0) { st.push(c); if (c[3] > 0.99) break; } } return st.reverse().reduce((u, t) => over(t, u), [255, 255, 255, 1]); };
   const rg = document.createRange(), linesOf = (el, size) => { const tops = []; const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); for (let n = tw.nextNode(); n; n = tw.nextNode()) { if (!n.nodeValue.trim()) continue; rg.selectNodeContents(n); for (const r of rg.getClientRects()) { const m = r.top + r.height / 2; if (r.width >= 1 && r.height >= size * 0.35 && !tops.some((t) => Math.abs(t - m) < size * 0.55)) tops.push(m); } } return Math.max(1, tops.length); };
-  // The screen scale of an element: CSS transform and scale up the tree, or an SVG element's screen matrix (viewBox too).
+  // Screen scale: transforms up the tree, or an SVG screen matrix.
   const det = (m) => Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)), scMemo = new Map(), scaleOf = (el) => {
     if (!el || el === html || !(el instanceof Element)) return 1; if (scMemo.has(el)) return scMemo.get(el); let v;
     if (el instanceof SVGGraphicsElement && el.ownerSVGElement) { const m = el.getScreenCTM(); v = m ? det(m) : 1; }
     else { const cs = gcs(el), k = cs.scale && cs.scale !== 'none' ? cs.scale.split(' ').map(parseFloat) : null; v = scaleOf(el.parentElement) * (cs.transform !== 'none' ? det(new DOMMatrix(cs.transform)) : 1) * (k ? Math.sqrt(Math.abs(k[0] * (k[1] ?? k[0]))) : 1); }
     scMemo.set(el, v); return v; };
-  // Every visible text run by its element; px: the rendered size (font-size times the screen scale).
+  // Visible text runs; px: font-size times the screen scale.
   const map = new Map(), tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = tw.nextNode(); n; n = tw.nextNode()) {
     const t = n.nodeValue.replace(/\s+/g, ' ').trim(), el = n.parentElement;
@@ -86,7 +88,6 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   const T = [...map.values()], shown = T.filter((e) => e.op >= 0.1), total = T.reduce((a, e) => a + e.text.length, 0) || 1;
   const fold = shown.filter((e) => e.rects.some((r) => onFirst(r, e.el))), chars = (a) => a.reduce((n, e) => n + e.text.length, 0);
   // 1. breakage
-  // overflow
   const ov = html.scrollWidth - W; if (ov > 1) {
     const clipX = (a) => { for (; a && a !== document.body && a !== html; a = a.parentElement) { const cs = gcs(a), b = bcr(a); if ((/hidden|clip/.test(cs.overflowX) || /paint|strict|content/.test(cs.contain)) && b.left >= -1 && b.right <= W + 1) return true; } return false; }, wide = [];
     for (const e of qsa('*')) { if (e.closest('.gb-switch')) continue; const r = bcr(e);
@@ -110,7 +111,7 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
     if (top > H) add('FAIL', 'h1-below-fold', `the h1 starts ${Math.round(top)}px down, below the first screen`);
     const denseScreen = scale === 'quiet' || (work && scale !== 'editorial' && scale !== 'hero');
     const h1Cap = denseScreen ? (mobile ? 28 : 32) : display ? (mobile ? Math.min(display, 40) : Math.min(display, 64)) : null;
-    // An answer figure carries the screen: the h1 is then a quiet label (20 to 28px), no small-h1.
+    // An answer figure: the h1 is a quiet label, no small-h1.
     if (heroFigure || figureAsked || [...qda('[data-figure]')].some(vis)) {}
     else if (!denseScreen && s < (mobile ? 26 : 32)) add('WARN', 'small-h1', `h1 is ${Math.round(s)}px; a page title is display size`);
     else if (!denseScreen && !mobile && display && s < Math.min(display, 64) - 4) add('WARN', 'small-h1', `h1 is ${Math.round(s)}px; tokens.type.display is ${display}px: the floors are minimums, not the scale`);
@@ -118,7 +119,6 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
     if (!work && words > 10) add('WARN', 'h1-words', `h1 is ${words} words; aim for about 5`);
     if (h1s.length > 1) add('WARN', 'many-h1', `${h1s.length} h1 elements`);
   }
-  // A work screen figure (digits, not the h1): over the cap FAILs; 48px up to it WARNs, but for one hero figure.
   if (work) {
     const cap = mobile ? 64 : 96, figs = shown.filter((e) => e.size >= 48 && /\d/.test(e.text) && !e.el.closest('h1')).sort((a, b) => b.size - a.size);
     const over = figs.filter((e) => e.size > cap);
@@ -140,7 +140,7 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   const extra = fams.filter(([f]) => fonts.length && !fonts.includes(f));
   if (extra.length || fams.length > 4) add('FAIL', 'font-count', extra.length ? `${extra.map(([f]) => f).join(', ')} set 2% or more of the text but is not a token family (${fonts.join(', ')})` : `${fams.length} typefaces (${fams.map(([f]) => f).join(', ')}); 4 at most: display, text, arabic, arabicDisplay`);
   const bodyFloor = ar || want === 'ar' ? 17 : 16;
-  // Labels and data may be 14px (the floor): a screen of short rows passes when its sentences (8 words or more) are body size.
+  // Labels may be 14px; sentences (8 words or more) are body size.
   const sentTally = new Map(); for (const e of shown) if (!vizLab(e) && e.text.trim().split(/\s+/).length >= 8) sentTally.set(Math.round(e.size), (sentTally.get(Math.round(e.size)) || 0) + e.text.length);
   const sentBody = [...sentTally.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
   if (body && body < bodyFloor && (sentBody === null || sentBody < bodyFloor)) add('FAIL', 'body-size', `most text is set at ${body}px${sentBody ? `, sentences too (${sentBody}px)` : ''}; body is ${bodyFloor}px or more (${bodyFloor === 17 ? 'Arabic' : 'English'}), work screens too; labels and data may stay at 14px when the sentences are body size`);
@@ -148,17 +148,16 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   const pxs = (e) => `${Math.round(e.px * 10) / 10}px${e.px !== e.size ? ` (${e.size}px scaled)` : ''}`;
   const tiny = shown.filter((e) => e.px < 12 && e.text.length >= 2 && !e.el.closest('sup, sub'));
   if (tiny.length) add('FAIL', 'tiny-text', `${tiny.length} text block(s) under 12px as rendered: ${tiny.slice(0, 3).map((e) => '"' + clip(e.text) + '" ' + pxs(e)).join(', ')}`);
-  // blurred text: a blur on text reads as broken or placeholder text (fog, frost, glass); hide it, or show it sharp
   const blurOf = (el) => { for (let a = el, d = 0; a && a !== document.body && d < 8; a = a.parentElement, d++) if (/blur\(/.test(gcs(a).filter)) return true; return false; };
   const blurred = shown.filter((e) => e.text.length >= 2 && e.op >= 0.1 && blurOf(e.el));
   if (blurred.length) add('FAIL', 'blurred-text', `${blurred.length} text block(s) sit under a blur filter: ${blurred.slice(0, 3).map((e) => '"' + clip(e.text) + '"').join(', ')}; never blur text: show it sharp, or hide it (and say what is hidden in words)`);
-  // 13.9: a 14px label inside a scaled viewBox renders at 13.99px; sub-pixel rounding is not small type.
+  // 13.9: sub-pixel rounding is not small type.
   const share = (a) => { const n = chars(a); return n ? chars(a.filter((e) => e.px < 13.9)) / n : 0; }, smallShare = Math.max(share(fold), share(shown)), scaled = shown.filter((e) => e.px < 13.9 && e.size >= 14);
   if (smallShare > 0.1) add('FAIL', 'small-share', `${Math.round(smallShare * 100)}% of the visible characters are under 14px as rendered (first screen ${Math.round(share(fold) * 100)}%, page ${Math.round(share(shown) * 100)}%)${scaled.length ? `, ${scaled.length} block(s) shrunk by a transform or viewBox ("${clip(scaled[0].text)}" ${pxs(scaled[0])})` : ''}; 10% at most, data and labels are 14px or more on screen`);
   const longest = Math.max(0, ...shown.filter((e) => e.text.length > 120).map((e) => Math.max(...e.rects.map((r) => r.width)) / (e.size * 0.5)));
   if (!mobile && longest > 88) add('WARN', 'measure', `a paragraph runs about ${Math.round(longest)} characters a line; cap at 45 to 75 (max-width: 62ch)`);
-  // 4. contrast (WCAG 2.2 SC 1.4.3) on the surface each text really sits on
-  // Text on glass, a gradient, an image or in an SVG goes to `ground`: the runner checks it on screenshots.
+  // 4. contrast
+  // Text on glass, a gradient, an image or an SVG goes to `ground` (screenshots).
   const low = [], dim = [], ground = []; let unmeasured = 0;
   for (const e of shown) {
     const svgT = e.el instanceof SVGElement, paint = svgT ? e.cs.fill : e.cs.webkitTextFillColor || e.cs.color, fg = /^(rgb|#|hsl|color\(|lab|lch|oklab|oklch)/.test(paint) ? rgba(paint) : null;
@@ -172,10 +171,10 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   if (low.length) add('FAIL', 'contrast', `${low.length} text block(s) under AA: ${low.slice(0, 4).join('; ')}`);
   if (dim.length) add('WARN', 'opacity-text', `${dim.length} text block(s) dimmed with opacity (use a lighter color that passes): "${dim[0]}"`);
   if (unmeasured) add('WARN', 'contrast-unmeasured', `${unmeasured} text block(s) on an image or gradient could not be sampled (below the first screen, or a gradient fill): check them by eye at the darkest and lightest point; body text belongs on a solid or glass panel`);
-  // 5. the frame: equal margins, text off the edge, few left edges (color fields count as content)
+  // 5. the frame
   const bodyBg = gcs(document.body).backgroundColor, fills = [...qsa('*')].filter((e) => { const cs = gcs(e); return vis(e) && (cs.backgroundImage !== 'none' || (rgba(cs.backgroundColor)[3] > 0.5 && cs.backgroundColor !== bodyBg)); });
   const pick = (a, p) => { a = [...a].sort((x, y) => x - y); return a[Math.floor((a.length - 1) * p)]; }, boxes = [...shown.filter((e) => !moving(e.el, true)).map((e) => e.el), ...fills, ...qda('img,video,canvas,svg,button,input,select,textarea')].filter(vis).map((e) => bcr(e)).filter((r) => r.width < W * 0.97 && r.left >= -1 && r.right <= W + 1 && r.bottom > -SY && r.height >= 1);
-  // The content edges: box percentiles, or the outer edges of the big boxes (a slip, a column), whichever is more balanced.
+  // Content edges: box percentiles or the big boxes' outer edges, the more balanced.
   const major = [...boxes, ...[...qda('main,[role=main],article,section,header,footer,aside,nav')].filter(vis).map((e) => bcr(e)).filter((r) => r.width < W * 0.97 && r.left >= -1 && r.right <= W + 1 && r.height >= 1)].filter((r) => r.width >= W * 0.3 || r.height >= H * 0.5);
   const lr = (a, q) => [Math.round(pick(a.map((r) => r.left), q)), Math.round(W - pick(a.map((r) => r.right), 1 - q))], pc = boxes.length ? lr(boxes, 0.02) : null, mj = major.length >= 2 ? lr(major, 0) : null;
   const [L, R] = pc && mj ? (Math.abs(mj[0] - mj[1]) < Math.abs(pc[0] - pc[1]) ? mj : pc) : pc || mj || [null, null];
@@ -192,18 +191,18 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   const phys = (td) => { const a = gcs(td).textAlign.replace('-webkit-', ''); return a === 'start' ? (rtl ? 'right' : 'left') : a === 'end' ? (rtl ? 'left' : 'right') : a; };
   const cells = nums.filter((e) => e.el.closest('td')?.cellIndex > 0), start = cells.filter((e) => phys(e.el.closest('td')) !== 'right');
   if (cells.length >= 6 && start.length / cells.length >= 0.5) add('WARN', 'numeric-align', `${start.length} of ${cells.length} numeric cells are not right aligned; figures align right in both directions so the decimals line up`);
-  // 7. blank stretches down the page (8px rows; text, media, controls and color fields fill a row)
+  // 7. blank stretches (8px rows)
   const pageH = html.scrollHeight, rows = new Uint8Array(Math.ceil(pageH / 8)), mark = (r) => { for (let y = Math.max(0, Math.floor((r.top + SY) / 8)); y < Math.min(rows.length, Math.ceil((r.bottom + SY) / 8)); y++) rows[y] = 1; };
   T.forEach((e) => e.rects.forEach(mark)); qda('img,video,canvas,svg,button,input,select,textarea').forEach((e) => vis(e) && mark(bcr(e)));
   fills.map((e) => bcr(e)).filter((r) => r.width >= W * 0.5).forEach(mark);
   const gaps = [], first = rows.indexOf(1), last = rows.lastIndexOf(1); let run = 0; for (let y = first; y <= last + 1 && first >= 0; y++) { if (y <= last && !rows[y]) run++; else { if (run * 8 >= H * 0.42) gaps.push({ top: (y - run) * 8, h: run * 8 }); run = 0; } }
   if (gaps.length) add(gaps.some((g) => g.h >= H * 0.6) ? 'FAIL' : 'WARN', 'blank-gap', `${gaps.length} stretch(es) hold nothing: ${gaps.slice(0, 3).map((g) => g.h + 'px at ' + g.top).join('; ')} (screen is ${H}px)`);
-  // 8. targets (WCAG 2.2 SC 2.5.8) and the main action on a phone
+  // 8. targets
   const ctl = [...qda('a[href],button,input:not([type=hidden]),select,textarea,[role=button],[role=tab],[role=switch],[role=checkbox],[tabindex]:not([tabindex="-1"])')].filter(vis).filter((e) => !e.closest('.gb-switch') && !srOnly(e)).filter((e) => !(e.tagName === 'A' && gcs(e).display === 'inline' && e.closest('p,li')));
   const small = ctl.filter((e) => { const r = bcr(e); return r.width < 24 || r.height < 24; });
   if (small.length) add('FAIL', 'target-size', `${small.length} control(s) under 24x24px (or give them 24px spacing): ${small.slice(0, 3).map((e) => sel(e) + ' ' + Math.round(bcr(e).width) + 'x' + Math.round(bcr(e).height)).join(', ')}`);
   if (mobile) { const btn = ctl.filter((e) => e.matches('button,[role=button]') && bcr(e).height < 44); if (btn.length) add('WARN', 'phone-target', `${btn.length} button(s) under 44px tall on the phone; the main action is 44px or more`); }
-  // 8b. restraint: the first screen holds few things (the default view, no ?state or ?data)
+  // 8b. restraint
   const B = dense ? (mobile ? { text: 50, controls: 18 } : { text: 100, controls: 28 }) : mobile ? { text: 30, controls: 10 } : { text: 60, controls: 16 };
   const CTL = 'a[href],button,input:not([type=hidden]),select,textarea,[role=button],[role=link],[role=tab],[role=switch],[role=checkbox],[role=menuitem],[tabindex]:not([tabindex^="-"])';
   const controls = [...qda(CTL)].filter((e) => !e.closest('.gb-switch,[inert],[hidden],[aria-hidden="true"]') && !srOnly(e) && gcs(e).visibility !== 'hidden' && opac(e) >= 0.1 && onFirst(bcr(e), e));
@@ -212,7 +211,10 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   const rowOf = (e) => { for (let a = e.parentElement, d = 0; a && a !== document.body && d < 5; a = a.parentElement, d++) { const n = a.querySelectorAll(CTL).length; if (n > 3) return null; if (n >= 2 && bcr(a).height <= 200 && (a.matches('li,tr,[role=row],[role=listitem],[role=option]') || [...(a.parentElement?.children || [])].some((k) => k !== a && k.tagName === a.tagName && cls(k) === cls(a)))) return a; } return null; };
   const rowSeen = new Map(), units = (list, key) => new Set(list.map((x) => key(x))).size;
   const ctlUnits = units(controls, (e) => { const k = navOf(e) || langOf(e); if (k) return k; const r = rowOf(e), n = r ? rowSeen.get(r) || 0 : 2; if (n < 2) { rowSeen.set(r, n + 1); return r; } return e; });
-  const textUnits = units(fold, (e) => navOf(e.el) || vizLab(e) || (e.el.closest(CTL) && langOf(e.el)) || e);
+  // viz series labels count once; one-off labels each
+  const markish = (k) => { const cs = gcs(k); return rgba(cs.backgroundColor)[3] > 0.3 || ['Top', 'Right', 'Bottom', 'Left'].some((sd) => parseFloat(cs['border' + sd + 'Width']) >= 2 && rgba(cs['border' + sd + 'Color'])[3] > 0.3); };
+  const onPic = (e) => { const v = vizLab(e); if (!v) return null; if (e.el.closest('svg,canvas')) return v; for (let a = e.el, d = 0; a && a !== v; a = a.parentElement, d++) { if (/absolute|fixed/.test(gcs(a).position)) return v; if (d < 4 && markish(a) && [...(a.parentElement?.children || [])].filter((k) => k.tagName === a.tagName && cls(k) === cls(a)).length >= 3) return v; } return null; };
+  const textUnits = units(fold, (e) => navOf(e.el) || onPic(e) || (e.el.closest(CTL) && langOf(e.el)) || e);
   if (textUnits > B.text) add('FAIL', 'text-elements', `${textUnits} text elements on the first screen; ${B.text} at most at ${W}px: defer the rest behind a click, a tab or "View all"`);
   if (ctlUnits > B.controls) add('FAIL', 'controls', `${ctlUnits} interactive controls on the first screen; ${B.controls} at most at ${W}px (a bottom nav and the language switch count as one each, a row's open and one action as one): keep the main action and the few that serve the one job`);
   const VIZ = /(^|[-_\s])(map|dial|chart|plot|graph|viz|radar|globe|gauge|orbit|clock|canvas|stage)([-_\s]|$)/i;
@@ -239,14 +241,14 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   const behind = (x, y, p, q, both) => { const h = document.elementFromPoint(x, y); return !!h && ((branch(p, q, h) && solid(p, q)) || (!!both && branch(q, p, h) && solid(q, p))); };
   const hitBy = (A, bx, inside, other) => A.bx.some((a) => bx.some((b) => { const m = meet(a, b); return m.w >= 3 && m.h >= 3 && !(inside && b.l <= a.l + 2 && b.r >= a.r - 2 && b.t <= a.t + 2 && b.b >= a.b - 2) && !(other && behind(Math.max(a.l, b.l) + m.w / 2, Math.max(a.t, b.t) + m.h / 2, A.e.el, other, !inside)); }));
   const overlaps = new Set();
-  for (let i = 0; i < lay.length; i++) for (let j = i + 1; j < lay.length; j++) { const A = lay[i], C = lay[j], ca = A.e.el.closest(CTL); if (A.pin !== C.pin || A.e.el.contains(C.e.el) || C.e.el.contains(A.e.el) || (ca && ca === C.e.el.closest(CTL))) continue; if (hitBy(A, C.bx, false, C.e.el)) overlaps.add(`"${clip(A.e.text)}" and "${clip(C.e.text)}"`); }
+  for (let i = 0; i < lay.length; i++) for (let j = i + 1; j < lay.length; j++) { const A = lay[i], C = lay[j], ca = A.e.el.closest(CTL); if (A.pin !== C.pin || A.e.el.contains(C.e.el) || C.e.el.contains(A.e.el) || (ca && ca === C.e.el.closest(CTL) && [A.e.el, C.e.el].some((x) => { for (let a = x; a && a !== ca; a = a.parentElement) if (/absolute|fixed/.test(gcs(a).position)) return true; return false; }))) continue; if (hitBy(A, C.bx, false, C.e.el)) overlaps.add(`"${clip(A.e.text)}" and "${clip(C.e.text)}"`); }
   const veil = [...qsa('*')].filter((k) => { const r = bcr(k); return gcs(k).pointerEvents === 'none' && r.width >= W * 0.9 && r.height >= Math.min(H, document.body.offsetHeight) * 0.9 && !txtOf(k).trim(); });
-  // An SVG shape that is a control (a hex tile, a map region) is tested by its painted shape below, never its box: boxes of packed shapes overlap.
+  // An SVG control shape is tested by its painted shape, never its box.
   const ctlBox = ctl.filter((c) => opac(c) >= 0.1 && !(c instanceof SVGElement && c.localName !== 'svg')).map((c) => ({ c, pin: pinned(c), bx: [...c.getClientRects()].map((r) => cut({ l: r.left + 1, t: r.top + 1, r: r.right - 1, b: r.bottom - 1 }, clipOf(c))).filter((x) => area(x) > 0) }));
   for (const A of lay) for (const C of ctlBox) { const lab = A.e.el.closest('label,legend'); if (A.pin !== C.pin || C.c.contains(A.e.el) || A.e.el.contains(C.c) || (lab && (lab.control === C.c || lab.contains(C.c)))) continue; if (hitBy(A, C.bx, true, C.c)) overlaps.add(`"${clip(A.e.text)}" and ${sel(C.c)}`); }
   const marks = [...qsa('*')].filter((m) => { if (m.closest('.gb-switch') || m.matches(CTL)) return false; const r = bcr(m); if (r.width < 4 || r.height < 4 || r.width > 40 || r.height > 40) return false; const cs = gcs(m); if (cs.visibility === 'hidden' || opac(m) < 0.25) return false; if (m instanceof SVGElement) return m.matches('circle,ellipse,rect,polygon,path,image,use') && (m.matches('image,use') || ink(m, 'fill') >= 0.25 || ink(m, 'stroke') >= 0.25); return !m.children.length && !m.textContent.trim() && (rgba(cs.backgroundColor)[3] > 0.5 || cs.backgroundImage !== 'none'); }).map((m) => ({ m, pin: pinned(m), r: cut(box(bcr(m)), clipOf(m)) })).filter((k) => area(k.r) > 0);
   for (const A of lay) for (const K of marks) { if (A.pin !== K.pin || A.e.el.contains(K.m) || (A.ko && K.m.closest('[data-viz]') === A.viz)) continue; if (A.bx.some((a) => { const m = meet(a, K.r); return area(K.r) < area(a) && m.w > 0 && m.h > 0 && m.w * m.h >= Math.max(12, area(K.r) * 0.25) && !behind(Math.max(a.l, K.r.l) + m.w / 2, Math.max(a.t, K.r.t) + m.h / 2, A.e.el, K.m); })) overlaps.add(`"${clip(A.e.text)}" and a ${K.m.localName}${cls(K.m).trim() ? '.' + cls(K.m).trim().split(/\s+/)[0] : ''}`); }
-  // Painted over the glyphs, or a line through them (a badge, a pole, a path, a tick): hit tests on glyph lines and along
+  // Paint over the glyphs or a line through them: hit tests on glyph lines.
   const pe = document.createElement('style'); pe.textContent = '*{pointer-events:auto!important}'; document.head.append(pe);
   const jobs = [], X0 = scrollX, Y0 = scrollY, solidHit = (k, x, y) => { if (k instanceof SVGGeometryElement) { const cs = gcs(k), m = k.getScreenCTM(); return cs.fill !== 'none' && +cs.fillOpacity * opac(k) > 0.9 && !!m && k.isPointInFill(new DOMPoint(x, y).matrixTransform(m.inverse())); } if (k instanceof SVGElement) return false; const cs = gcs(k); return k.matches('img,video,canvas,iframe') || rgba(cs.backgroundColor)[3] >= 0.6 || cs.backdropFilter !== 'none' || (cs.backgroundImage !== 'none' && !/transparent|rgba\([^)]*,\s*0\)/.test(cs.backgroundImage)); };
   const paints = (k, x, y) => { if (k instanceof SVGGeometryElement) { const m = k.getScreenCTM(); return ink(k, 'fill') >= 0.25 && !!m && k.isPointInFill(new DOMPoint(x, y).matrixTransform(m.inverse())); } if (opac(k) < 0.25) return false; if (k.matches('image,img,video,canvas,iframe')) return true; if (k instanceof SVGElement) return false; const cs = gcs(k), r = bcr(k); if (rgba(cs.backgroundColor)[3] * opac(k) > 0.3 || (cs.backgroundImage !== 'none' && !/transparent|rgba\([^)]*,\s*0\)/.test(cs.backgroundImage))) return true; return [['Top', y - r.top], ['Bottom', r.bottom - y], ['Left', x - r.left], ['Right', r.right - x]].some(([sd, d]) => { const bw = parseFloat(cs['border' + sd + 'Width']); return bw > 0 && d <= bw && rgba(cs['border' + sd + 'Color'])[3] > 0.3; }); };
@@ -275,7 +277,7 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
       const cs = a === e.el ? e.cs : gcs(a), cx = /hidden|clip/.test(cs.overflowX), cy = /hidden|clip/.test(cs.overflowY);
       if ((/auto|scroll/.test(cs.overflowX) && a.scrollWidth > a.clientWidth + 1) || (/auto|scroll/.test(cs.overflowY) && a.scrollHeight > a.clientHeight + 1)) break;
       if (!cx && !cy) continue;
-      const b = bcr(a), L = b.left + (a.clientLeft || 0), T = b.top + (a.clientTop || 0), R = a.clientWidth ? L + a.clientWidth : b.right, Bm = a.clientHeight ? T + a.clientHeight : b.bottom, pan = panBox(a);
+      const b = bcr(a), L = b.left + (a.clientLeft || 0), T = b.top + (a.clientTop || 0), R = a.clientWidth ? L + a.clientWidth : b.right, Bm = a.clientHeight ? T + a.clientHeight : b.bottom, pan = a.localName === 'svg' ? a.matches('[data-pan],[role=application]') || /grab|move/.test(cs.cursor) || cs.touchAction === 'none' : panBox(a);
       rs = rs.filter((r) => r.right > L && r.left < R && r.bottom > T && r.top < Bm);
       if (!ell(a)) for (const r of rs) { const sx = cx && (r.right > R + 1 || r.left < L - 1), sy = cy && (r.bottom > Bm + 1 || r.top < T - 1); if (pan ? sx && (rtl ? r.right <= R + 1 : r.left >= L - 1) : sx || sy) { hit = sel(a); break; } }
       rs = rs.map((r) => ({ left: cx ? Math.max(r.left, L) : r.left, right: cx ? Math.min(r.right, R) : r.right, top: cy ? Math.max(r.top, T) : r.top, bottom: cy ? Math.min(r.bottom, Bm) : r.bottom }));
@@ -283,8 +285,16 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
     if (!hit && html.scrollWidth <= W + 1 && !moving(e.el, true) && rs.some((r) => (r.left < -1 && r.right > 1) || (r.right > W + 1 && r.left < W - 1))) hit = 'the screen edge';
     if (hit) cutText.push(`"${clip(e.text)}" in ${hit}`);
   }
+  const spill = [];
+  for (const e of shown) {
+    if (e.text.length < 2 || e.op < 0.1 || e.el instanceof SVGElement || moving(e.el, true)) continue; let card = null;
+    for (let a = e.el, d = 0; a && a !== document.body && a !== html && d < 8; a = a.parentElement, d++) { const cs = a === e.el ? e.cs : gcs(a); if (/absolute|fixed/.test(cs.position) || /hidden|clip|auto|scroll/.test(cs.overflowX + cs.overflowY)) break; if (rgba(cs.backgroundColor)[3] > 0.3 || ['Top', 'Right', 'Bottom', 'Left'].some((k) => parseFloat(cs['border' + k + 'Width']) > 0 && rgba(cs['border' + k + 'Color'])[3] > 0.3)) { card = a; break; } }
+    if (!card) continue; const c = bcr(card); if (c.width >= W - 2) continue;
+    const out = Math.max(0, ...e.rects.map((r) => Math.max(c.left - r.left, r.right - c.right, c.top - r.top - r.height * 0.18, r.bottom - r.height * 0.18 - c.bottom)));
+    if (out > 2) spill.push(`"${clip(e.text)}" ${Math.round(out)}px out of ${sel(card)}`);
+  }
+  if (spill.length) add('FAIL', 'text-spill', `${spill.length} text block(s) run out of their card: ${spill.slice(0, 3).join('; ')}; let it wrap, end it with text-overflow: ellipsis, or give the card room`);
   if (cutText.length) add('FAIL', 'clipped-text', `${cutText.length} text block(s) cut off by their box (overflow hidden, no ellipsis): ${cutText.slice(0, 3).join('; ')}; let it wrap, give the box room, or end it with text-overflow: ellipsis`);
-  // fixed-trapped
   const trapOf = (e) => { for (let a = e.parentElement; a && a !== html; a = a.parentElement) { const cs = gcs(a); for (const [k, v] of [['transform', cs.transform], ['filter', cs.filter], ['backdrop-filter', cs.backdropFilter], ['perspective', cs.perspective], ['contain', /paint|layout|strict|content/.test(cs.contain) ? cs.contain : ''], ['will-change', /transform|filter|perspective/.test(cs.willChange) ? cs.willChange : ''], ['container-type', /size/.test(cs.containerType) ? cs.containerType : '']]) if (v && v !== 'none') return `${sel(a)} (${k}: ${v.slice(0, 28)})`; } return null; };
   for (const f of [...qsa('*')].filter((e) => gcs(e).position === 'fixed' && vis(e) && opac(e) >= 0.1 && !e.closest('.gb-switch,[aria-hidden="true"],[inert]') && !srOnly(e))) {
     const t = trapOf(f); if (!t) continue; const r = bcr(f), off = r.top < -1 || r.left < -1 || r.bottom > H + 1 || r.right > W + 1;
@@ -292,7 +302,6 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   }
   const scr = mobile ? 'first phone screen' : `first screen at ${W}`;
   {
-    // primary-offscreen
     const place = (e) => { const r = bcr(e), inView = r.top >= -1 && r.left >= -1 && r.bottom <= H + 1 && r.right <= W + 1, hit = inView && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { r, inView, cover: hit && !e.contains(hit) && !hit.contains(e) ? hit : null }; };
     const itemOf = (e) => { for (let a = e.parentElement, d = 0; a && a !== document.body && d < 5; a = a.parentElement, d++) { if (a.querySelectorAll(CTL).length > 3) return null; if (bcr(a).height <= 200 && (a.matches('li,tr,[role=row],[role=listitem],[role=option]') || (cls(a).trim() && [...(a.parentElement?.children || [])].filter((k) => k !== a && k.tagName === a.tagName && cls(k) === cls(a)).length >= 2))) return a; } return null; };
     let prim = document.querySelector('[data-primary]'); if (prim && !vis(prim)) prim = null;
@@ -302,9 +311,8 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
     }
     if (prim) {
       const { r, inView, cover } = place(prim), trap = pinned(prim) && trapOf(pinned(prim));
-      if (!inView || cover) add('FAIL', 'primary-offscreen', `the main action "${clip(txtOf(prim) || prim.getAttribute('aria-label') || sel(prim))}" ${!inView ? `is not on the ${scr} (it sits at ${Math.round(r.top)} to ${Math.round(r.bottom)}px of ${H})` : `is covered by ${sel(pinned(cover) || cover)}`}${trap ? `; its position: fixed is trapped by ${trap}` : ''}; keep it whole and uncovered on the first screen, at 390 in a sticky bottom bar if need be (mark the main action data-primary)`);
+      if (!inView || cover) add('FAIL', 'primary-offscreen', `the main action "${clip(txtOf(prim) || prim.getAttribute('aria-label') || sel(prim))}" ${!inView ? `is not on the ${scr} (${r.top >= -1 && r.bottom <= H + 1 ? `it sits ${Math.round(r.top)} to ${Math.round(r.bottom)}px down, inside the ${H}px height, but ${Math.round(r.left)} to ${Math.round(r.right)}px across, past the ${W}px width${moving(prim) ? ` in a sideways scroller ${sel(moving(prim))}` : ''}` : `it sits at ${Math.round(r.top)} to ${Math.round(r.bottom)}px of ${H}`})` : `is covered by ${sel(pinned(cover) || cover)}`}${trap ? `; its position: fixed is trapped by ${trap}` : ''}; keep it whole and uncovered on the first screen, at 390 in a sticky bottom bar if need be (mark the main action data-primary)`);
     }
-    // covered-content
     const coverOf = (e) => { const r = bcr(e), x = r.left + r.width / 2, y = r.top + r.height / 2; if (x < 0 || x >= W || y < 0 || y >= H) return null; const h = document.elementFromPoint(x, y), p = h && pinned(h); return p && !p.contains(e) && !e.contains(h) && !p.closest('.gb-switch') ? p : null; };
     const root = document.scrollingElement || html, scrollerOf = (e) => { for (let a = e.parentElement; a && a !== document.body && a !== html; a = a.parentElement) { const cs = gcs(a); if (/auto|scroll|overlay/.test(cs.overflowY) && a.scrollHeight > a.clientHeight + 1) return a; } return root; };
     const clear = (e, p, box) => { const pr = bcr(p), r = bcr(e); box.scrollBy({ top: pr.top > H / 2 ? r.bottom - pr.top + 4 : -(pr.bottom - r.top + 4), behavior: 'instant' }); };
@@ -318,7 +326,6 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
     }
     if (under.size) { const ex = [...under.keys()].slice(0, 3).map((e) => e.matches(CTL) ? sel(e) : `"${clip(txtOf(e))}"`); add('FAIL', 'covered-content', `${under.size} item(s) on the ${scr} sit under ${[...new Set([...under.values()].map(sel))].join(', ')} and stay there when scrolled or focused: ${ex.join(', ')}; give the page padding-bottom and scroll-padding-bottom on its scroller (html, or the app shell's main; top for a top bar) equal to the height of every bar pinned to that edge together; two bars on one edge (an action and a nav) read best as one fixed dock`); }
   }
-  // colour-only-status
   const STATUS = /^(status|late|overdue|stale|error|failed|fail|failing|warning|warn|ok|success|done|complete|completed|pending|waiting|blocked|held|running|idle|online|offline|busy|away|danger|critical|urgent|review|approved|rejected|paused)$/i;
   const stCls = (e) => cls(e).split(/\s+/).filter((c) => c && c.split(/[-_]+/).some((t) => STATUS.test(t))), keyOf = (e) => e.dataset?.status ?? stCls(e).sort().join(' ');
   const kindOf = (e) => e.localName + '.' + cls(e).split(/\s+/).filter((c) => c && !stCls({ getAttribute: () => c }).length).sort().join('.');
@@ -332,7 +339,6 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
     const me = sig(e), twin = peers.find((p) => sig(p) === me); if (twin && ![...flat.keys()].some((x) => kindOf(x) === k)) flat.set(e, `${sel(e)} "${keyOf(e)}" looks like "${keyOf(twin) || 'none'}" but for colour`);
   }
   if (flat.size) add('FAIL', 'colour-only-status', `${flat.size} status mark(s) told apart by colour alone: ${[...flat.values()].slice(0, 3).join('; ')}; add a word, an icon or a shape that changes with the status, or an aria-label that names it`);
-  // empty-tile
   const indicator = (e, cs) => !!e.querySelector('input,select,textarea,[role=checkbox],[role=switch],[role=radio]') || !!e.closest('[role=status],[role=progressbar],[aria-busy=true]') || cs.animationName !== 'none' || ['Top', 'Right', 'Bottom', 'Left'].some((sd) => parseFloat(cs['border' + sd + 'Width']) > 0 && rgba(cs['border' + sd + 'Color'])[3] < 0.05);
   const TILE = /^(icon|icons|ic|ico|avatar|avi|thumb|thumbnail|logo|glyph|pic|photo|img|image|emblem|monogram|initials|tile)$/i, empty = [];
   const gone = (k) => { const r = bcr(k), s = gcs(k); return r.width < 1 || r.height < 1 || s.visibility === 'hidden' || +s.opacity < 0.05; };
@@ -349,22 +355,19 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   }
   if (empty.length) add('FAIL', 'empty-tile', `${empty.length} icon or avatar tile(s) or capsule(s) hold nothing (no image, icon, text or label; or their contents are hidden at ${W}px): ${[...new Set(empty)].slice(0, 3).join(', ')}; draw the icon or the initials, show the contents, or hide the box with them`);
   const isState = /[?&]state=/.test(location.search), isDefault = !/[?&](state|data)=/.test(location.search);
-  // figure-below-fold
   const numeral = (t) => /\d/.test(t) && t.replace(/[\d\s.,:%+\-\u2212/()]/g, '').length <= 3, notFig = /[$€£¥₹¤]|\d:\d\d|\b(am|pm|usd|sar|aed|eur|gbp|kwd|qar|sr|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|mon|tue|wed|thu|fri|sat|sun)\b|ر\.?س|د\.?إ|^\s*(19|20)\d\d\s*$|\d[./-]\d+[./-]\d/i;
   const figEl = [...qda('[data-figure]')].find(vis) || (figureAsked ? shown.filter((e) => e.size >= 32 && numeral(e.text) && !notFig.test(e.text)).sort((a, b) => b.size - a.size)[0]?.el : null);
-  // figure-missing
   const figDom = document.querySelector('[data-figure]'), figHid = figDom && ![...qda('[data-figure]')].some(vis);
   if (figureAsked && !isState && (figHid || !figEl)) add('FAIL', 'figure-missing', `the tokens ask an answer figure (${heroFigurePx ? `type.heroFigure ${heroFigurePx}px` : 'mechanic.figure'}) but ${figHid ? `${sel(figDom)}[data-figure] is hidden` : 'no [data-figure] or figure numeral shows'} at ${W}; the figure shows on the first screen at 390 and 1440`);
   if (figEl && !figHid && !isState) { const r = bcr(figEl), c = clipOf(figEl.parentElement); if (r.top < c.top - 1 || r.bottom > c.bottom + 1) add('FAIL', 'figure-below-fold', `the answer figure "${clip(txtOf(figEl))}" sits at ${Math.round(r.top + SY)} to ${Math.round(r.bottom + SY)}px, not whole on the first screen (${H}px at ${W}); it answers the one question before any scroll: move it up or cut what sits above it`); }
-  // hero-object, empty-panel
   const heroes = [...qda('[data-viz]')].filter(vis).map((e) => ({ e, r: bcr(e) })).sort((a, b) => b.r.width * b.r.height - a.r.width * a.r.height), hero = heroes[0];
   const heroGate = !allow.includes('hero-object') && ((work ? figureAsked : heroAsked) || !!hero || !!document.querySelector('[data-figure]'));
   if (heroGate && !isState) {
-    if (!hero) add('WARN', 'hero-object', `no [data-viz] hero object: the first screen leads with one crafted viz that holds the answer (a dial with ticks, a segmented bar, a transit line, a gauge), marked data-viz; a page arrangement (a list, a column layout, a carousel) is not one${advice}`);
+    if (!hero) add('WARN', 'hero-object', `no [data-viz] hero object: the first screen leads with one idea object, marked data-viz (the hero's own subject, a picture, a drawing or a figure); a page arrangement (a list, columns, a carousel) is not one${advice}`);
     else { const { e, r } = hero, c = clipOf(e.parentElement), seen = Math.max(0, Math.min(r.bottom, c.bottom) - Math.max(r.top, c.top));
       const whole = (r.height > H || seen >= r.height * 0.9 - 2) && (r.width > c.right - c.left + 4 || (r.left >= c.left - 2 && r.right <= c.right + 2)), low = mobile && r.top >= H * 0.5;
       const sh = Math.max(0, Math.min(r.right, W) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, H) - Math.max(r.top, 0)) / (W * H), need = mobile ? 0.25 : 0.3;
-      if (!whole || low || sh < need) add('WARN', 'hero-object', `the hero object ${sel(e)}[data-viz] covers ${Math.round(sh * 100)}% of the first screen at ${W}${!whole ? ` and is not whole on it (${Math.round(r.top + SY)} to ${Math.round(r.bottom + SY)}px of ${H})` : low ? ` and starts at ${Math.round(r.top + SY)}px, below half of ${H}` : ''}; ${need * 100}% at least, whole when it fits the screen (aim for 40% at 1440, the top of the phone screen at 390): grow the viz, cut what crowds it${advice}`); }
+      const f = landing && !work && sh < 0.25; if (!whole || low || sh < need) add(f ? 'FAIL' : 'WARN', 'hero-object', `the hero object ${sel(e)}[data-viz] covers ${Math.round(sh * 100)}% of the first screen at ${W}${!whole ? ` and is not whole on it (${Math.round(r.top + SY)} to ${Math.round(r.bottom + SY)}px of ${H})` : low ? ` and starts at ${Math.round(r.top + SY)}px, below half of ${H}` : ''}; ${need * 100}% at least, whole when it fits the screen (aim for 40% at 1440, the top of the phone screen at 390): make the idea object bigger, cut what crowds it${f ? '' : advice}`); }
   }
   const painted = (e, cs = gcs(e)) => { const bg = rgba(cs.backgroundColor), pb = bgOf(e.parentElement); return cs.boxShadow !== 'none' || cs.backdropFilter !== 'none' || cs.backgroundImage !== 'none' || ['Top', 'Right', 'Bottom', 'Left'].filter((sd) => parseFloat(cs['border' + sd + 'Width']) > 0 && rgba(cs['border' + sd + 'Color'])[3] > 0.1).length >= 2 || (bg[3] > 0.05 && (!pb || Math.hypot(...over(bg, pb).slice(0, 3).map((v, i) => v - pb[i])) > 4)); };
   const deadP = [], hr = hero && box(hero.r);
@@ -407,12 +410,9 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   if (hero) { const hb = hero.r, EX = /\b(is|are|each|every|means|shows?)\b|(^|\s)(كل|يعني|تعني|يمثل|تمثل|يظهر|تظهر)(\s|$)/i;
     const leg = shown.filter((e) => e.text.split(/\s+/).length >= 6 && EX.test(e.text) && !e.el.closest('h1,h2,[data-figure]') && (hero.e.contains(e.el) || e.rects.some((q) => q.right > hb.left && q.left < hb.right && ((q.top >= hb.bottom - 4 && q.top - hb.bottom <= 48) || (q.bottom <= hb.top + 4 && hb.top - q.bottom <= 48)))));
     if (leg.length) add('WARN', 'viz-legend', `a line explains the hero object ("${clip(leg[0].text)}"); the viz reads without a legend or caption: label the marks themselves, or cut the line`); }
-  // hidden-shown
   const leak = [...qda('[hidden]:not([hidden=until-found])')].filter((e) => gcs(e).display !== 'none' && vis(e) && opac(e) >= 0.1 && !e.closest('.gb-switch') && !e.parentElement?.closest('[hidden]:not([hidden=until-found])'));
   if (leak.length) add('FAIL', 'hidden-shown', `${leak.length} element(s) carry the hidden attribute but still show, a display rule beats [hidden]: ${leak.slice(0, 3).map((e) => `${sel(e)} "${clip(txtOf(e))}"`).join(', ')}; add [hidden]{display:none!important}`);
-  // two-primary
   if (mobile) { const key = (e) => (txtOf(e) || e.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().toLowerCase(), names = new Set([...qda('[data-primary]')].filter(vis).map(key).filter(Boolean)); const twins = ctl.filter((c) => names.has(key(c)) && onFirst(bcr(c), c) && opac(c) >= 0.1); if (twins.length > 1) add('WARN', 'two-primary', `the main action "${clip(txtOf(twins[0]))}" shows ${twins.length} times on the first phone screen (${twins.slice(0, 3).map(sel).join(', ')}); hide the desktop copy at 390, one primary per screen`); }
-  // truncated-label
   const cutLab = [], worst = /[?&]data=worst/.test(location.search); let cutHead = 0, cutBtn = 0;
   for (const a of qsa('*')) {
     const cs = gcs(a), lc = parseInt(cs.webkitLineClamp) > 0, vert = /vertical|sideways/.test(cs.writingMode); if (!(lc || (cs.textOverflow === 'ellipsis' && /hidden|clip/.test(vert ? cs.overflowY : cs.overflowX)))) continue;
@@ -424,16 +424,13 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
     if (k < 0.97) { if (head) cutHead++; if (btn) cutBtn++; cutLab.push(`"${clip(t)}" (shows about ${Math.max(1, Math.round(t.length * k))} of ${t.length} characters)`); }
   }
   if (cutLab.length) add(cutLab.length > 3 || cutHead || cutBtn ? 'FAIL' : 'WARN', 'truncated-label', `${cutLab.length} short label(s) cut by an ellipsis${cutHead ? ` (${cutHead} of them heading(s), cut on a normal day)` : ''}${cutBtn ? ` (${cutBtn} on a button or the main action)` : ''}: ${cutLab.slice(0, 3).join(', ')}; a name under 24 characters, a heading and a button label at any length show whole: give it room, let it wrap, or shorten it`);
-  // wrapped-button
   const wrapL = ctl.filter((c) => c.matches('button,[role=button],input[type=submit]') && opac(c) >= 0.1).map((c) => { const ts = shown.filter((x) => c.contains(x.el)); return ts.length === 1 ? { c, t: ts[0].text, n: linesOf(c, ts[0].size) } : null; }).filter(Boolean);
   const wrap3 = wrapL.filter((x) => x.n >= 3), wrapB = wrapL.filter((x) => x.n === 2 && x.t.length <= 28).map((x) => x.c);
   if (wrap3.length) add('FAIL', 'wrapped-button', `${wrap3.length} button label(s) wrap to 3 lines or more: ${wrap3.slice(0, 3).map((x) => `"${clip(x.t)}" (${x.n} lines)`).join(', ')}; a label is one line: shorten it or give the button room (a round button holds an icon or one short word)`);
   if (wrapB.length) add('WARN', 'wrapped-button', `${wrapB.length} button label(s) wrap to 2 lines: ${wrapB.slice(0, 3).map((c) => `"${clip(txtOf(c))}"`).join(', ')}; a label is one line: shorten it ("Approve") or give the button room`);
-  // hyphen-break
   const hyph = new Set(), hw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), cr = document.createRange();
   for (let n = hw.nextNode(); n; n = hw.nextNode()) { if (!n.parentElement || n.parentElement.closest('script,style,[hidden],.gb-switch') || !map.has(n.parentElement)) continue; for (const m of n.nodeValue.matchAll(/(?<![\w-])([A-Za-z]{1,12})-([A-Za-z]{1,12})(?![\w-])/g)) { const i = m.index + m[1].length; cr.setStart(n, i); cr.setEnd(n, i + 1); const a = bcr(cr); cr.setStart(n, i + 1); cr.setEnd(n, i + 2); const b = bcr(cr); if (a.height && b.height && b.top > a.top + a.height * 0.5) hyph.add(`"${m[1]}-" / "${m[2]}"`); } }
   if (hyph.size) add('WARN', 'hyphen-break', `${hyph.size} hyphenated word(s) break at the hyphen: ${[...hyph].slice(0, 3).join(', ')}; keep the word on one line (a non-breaking hyphen U+2011, or white-space: nowrap on it)`);
-  // ground-haze
   if (!hazeOk) {
     const big = (e) => { const r = bcr(e); return r.width * r.height >= W * H * 0.4; }, haze = [];
     for (const e of [html, document.body, ...qsa('*')]) {
@@ -471,14 +468,12 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   }
   const raw = prose.filter((e) => RAW.test(e.text)); if (raw.length) add('FAIL', 'raw-telemetry', `${raw.length} text block(s) show a command, flag or hash as copy ("${clip(raw[0].text)}"); say what happened in product words, keep IDs quiet in mono, a real log only in a labelled <pre data-log>`);
   if (ar) {
-    // untranslated
     const nameW = (w) => /[A-Z\d]/.test(w) || /^(of|and|the|for|de|al|x|by|on|in|at|to|&)$/.test(w);
     const uiW = /^(review|approve|waiting|queue|settings|overview|marketing|product|products|sales|today|yesterday|more|less|all|open|done|new|save|cancel|send|edit|delete|view|search|home|profile|account|next|back|continue|submit|close|add|remove|details|status|pending|draft|posts|changes|request|menu|help|sign|login|update|filter|total|order|orders|checkout|now|week|month|items|tasks|team|users|report|reports|messages|inbox|dashboard|loading|error|retry|again|buy|start|see|show|hide|your|you|social|unread)$/;
     const enRun = (p) => { const ws = p.split(/[\s,:;]+/).filter(Boolean); if (ws.every(nameW) || (ws.length <= 4 && ws.some((w) => /^v\d|^\d+(\.\d+)+$/i.test(w)))) return false;
       return !(ws.length <= 3 && !/[A-Z]/.test(p) && !ws.some((w) => uiW.test(w.toLowerCase().replace(/[^a-z]/g, '')))); };
     const en = prose.filter((e) => !e.el.closest('[lang^="en"],[translate="no"]') && (e.text.match(/[A-Za-z][\w'’&.-]*(?:[\s,:;]+[A-Za-z\d&][\w'’&.-]*)+/g) || []).some(enRun));
     if (en.length) add('FAIL', 'untranslated', `${en.length} English label(s) or phrase(s) on the Arabic page ("${clip(en[0].text)}"); write it in Arabic, or mark a brand or product name translate="no" and a quoted original lang="en"`);
-    // latin-digits-in-arabic
     const wid = (f, t) => { cx.font = `40px ${f}`; return cx.measureText(t).width; }, gen = ['serif', 'sans-serif', 'monospace'], faceMemo = new Map();
     const digitFace = (e) => { const k = e.cs.fontFamily; if (!faceMemo.has(k)) faceMemo.set(k, k.split(',').map((f) => f.replace(/["']/g, '').trim()).find((f) => /^(serif|sans-serif|monospace|system-ui|ui-\w+|cursive|fantasy)$/.test(f) || gen.some((g) => Math.abs(wid(`"${f}", ${g}`, '0123456789') - wid(g, '0123456789')) > 0.5)) || null); return faceMemo.get(k); };
     const latD = shown.filter((e) => /\d/.test(e.text) && !e.el.closest('[lang^="en"],code,pre,kbd,samp') && ((f) => f && !/^(serif|sans-serif|monospace|system-ui|ui-\w+|cursive|fantasy)$/.test(f) && gen.every((g) => Math.abs(wid(`"${f}", ${g}`, 'ابتثجحخ') - wid(g, 'ابتثجحخ')) < 0.5))(digitFace(e)));
@@ -489,7 +484,7 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(txt)) add('WARN', 'emoji', 'emoji in the interface');
   const stock = txt.match(/\b(unlock|unleash|supercharge|seamless(ly)?|elevate|empower|effortless(ly)?|cutting[- ]edge|next[- ]gen|world[- ]class|all[- ]in[- ]one|revolutioni[sz]e|reimagined|streamline)\b/gi); if (stock) add('WARN', 'stock-copy', `stock phrases: ${[...new Set(stock.map((s) => s.toLowerCase()))].join(', ')}`);
   const vague = ctl.filter((e) => /^(learn more|get started|click here|read more|discover more|explore now|submit)$/i.test(txtOf(e).trim())); if (vague.length) add('WARN', 'vague-action', `${vague.length} control(s) with a vague label ("${txtOf(vague[0]).trim()}"); name the action`);
-  // 10. taste defaults (WARN only; ignore when the taste words or the signature element call for it)
+  // 10. taste defaults (WARN)
   const micro = shown.filter((e) => e.size < 16 && e.text.length >= 2 && e.text.length <= 40 && !e.el.closest('code,kbd,pre,samp') && (e.cs.textTransform === 'uppercase' || parseFloat(e.cs.letterSpacing) >= e.size * 0.05 || (/[A-Z]{2}/.test(e.text) && !/[a-z]/.test(e.text) && e.text.replace(/[^A-Z]/g, '').length >= 5)));
   if (micro.length >= 3) add(allow.includes('micro-labels') ? 'WARN' : 'FAIL', 'micro-labels', `${micro.length} small uppercase or letter-spaced labels ("${micro.slice(0, 3).map((e) => clip(e.text)).join('", "')}"); labels are sentence case at 14px or more${allow.includes('micro-labels') ? ' (kept: the taste words name them)' : ''}`);
   const gtext = shown.filter((e) => /text/.test(e.cs.backgroundClip + e.cs.webkitBackgroundClip)); if (gtext.length) add('WARN', 'gradient-text', `${gtext.length} gradient-filled text element(s)`);
@@ -498,6 +493,12 @@ function MEASURE({ work, colors = [], fonts = [], want = '', allow = [], dense =
   if (colors.length && off.length > 2) add('WARN', 'off-token-color', `${off.length} colors are not in tokens.colors, tokens.stage or the glass panels: ${off.slice(0, 4).map((c) => 'rgb(' + c + ')').join(', ')}`);
   const scripts = { latin: T.some((e) => /[A-Za-z]/.test(e.text)), arabic: T.some((e) => /[؀-ۿ]/.test(e.text)) };
   const measured = { lang: html.lang, dir: rtl ? 'rtl' : 'ltr', textElements: textUnits, controls: ctlUnits, fontSizes: sizes.length, smallShare: Math.round(smallShare * 1000) / 1000, bodyPx: body, tinyText: tiny.length, listMax, microLabels: micro.length, arabicChars: arChars, body, largest: Math.round(big), sizes, families: fams.map(([f]) => f), margins: [L, R], anchors: edges.length, figuresTabular: nums.length ? `${tab}/${nums.length}` : '-', scripts, loadedFonts: [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replace(/["']/g, '')) };
+  // mechanic-missing, mechanic-value: 1440 default view only.
+  const kinds = [...qda('[data-mechanic]')].map((e) => [e.dataset.mechanic.trim().toLowerCase(), e]), bad = kinds.find(([k]) => !['scroll', 'tap', 'swipe'].includes(k));
+  if (W === 1440 && !matchMedia('(prefers-reduced-motion: reduce)').matches && !/[?&](state|data)=/.test(location.search) && !allow.includes('mechanic-missing')) {
+    if (!kinds.length) add('FAIL', 'mechanic-missing', 'no [data-mechanic] box at 1440: mark the box its one action changes with data-mechanic="scroll", "tap" or "swipe" (none on purpose: only Calm or Stretch pages, restyles it does not reach, or the user\'s word: --taste-allows mechanic-missing)');
+    else if (bad) add('FAIL', 'mechanic-value', `${sel(bad[1])} has data-mechanic${bad[0] ? `="${bad[0]}"` : ' with no value'}; it takes scroll, tap or swipe, the one action that changes the box`);
+  }
   return { findings: out, measured, ground };
 }
 
@@ -514,15 +515,27 @@ const browser = await pw.chromium.launch().catch(cannot), runs = [], report = []
 try { rmSync(noRender, { force: true }); } catch {}
 for (const lang of languages) for (const [w, h] of [[390, 844], [1440, 900]]) runs.push({ lang, w, h, reduce: false });
 runs.push({ lang: languages.includes('en') ? 'en' : languages[0], w: 1440, h: 900, reduce: true });
-const LAYOUT = ['overflow', 'text-overlap', 'clipped-text', 'covered-content', 'hidden-shown', 'tiny-text', 'small-share', 'wrapped-button'];
+const LAYOUT = ['overflow', 'text-overlap', 'clipped-text', 'text-spill', 'covered-content', 'hidden-shown', 'tiny-text', 'small-share', 'wrapped-button'];
 for (const state of stateIds) for (const [w, h] of [[390, 844], [1440, 900]]) runs.push({ lang: languages[0], w, h, reduce: false, state });
 for (const r of runs) {
   const page = await browser.newPage({ viewport: { width: r.w, height: r.h }, reducedMotion: r.reduce ? 'reduce' : 'no-preference' });
   const src = urlFor[r.lang] || target, [fp, q] = src.split('?'), u = new URL(/^https?:|^file:/.test(src) ? src : pathToFileURL(resolve(fp)).href + (q ? '?' + q : '')); if (!urlFor[r.lang]) u.searchParams.set('lang', r.lang); if (r.state) u.searchParams.set('state', r.state);
   await page.goto(u.href, { waitUntil: 'load' }); await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(1500);
-  const res = await page.evaluate(MEASURE, { work, colors, fonts, want: r.lang, allow, dense, heroFigure, display, heroFigurePx, scale, hazeOk, figureAsked, heroAsked });
+  const res = await page.evaluate(MEASURE, { work, colors, fonts, want: r.lang, allow, dense, heroFigure, display, heroFigurePx, scale, hazeOk, figureAsked, heroAsked, landing });
   if (r.state) { res.findings = res.findings.filter((f) => LAYOUT.includes(f.id)); res.ground = []; }
-  // Text on glass, a gradient, an image or in an SVG: screenshots with and without text, the 5th and 95th percentile of the ground.
+  // mechanic-still: shots before and after the action, then a reload.
+  const kinds = await page.$$eval('[data-mechanic]', (es) => es.map((e) => [e.dataset.mechanic.trim().toLowerCase()]));
+  if (!r.reduce && !r.state && !allow.includes('mechanic-still')) for (const [i, [kind]] of kinds.entries()) {
+    const act = { scroll: 'a scroll of one screen', tap: 'a tap on its centre', swipe: 'a 200px drag toward the start edge' }[kind], el = page.locator('[data-mechanic]').nth(i); if (!act) continue;
+    const box = () => el.evaluate((e) => { const { x, y, width, height } = e.getBoundingClientRect(); return { x: x + scrollX, y: y + scrollY, width, height, cx: x + width / 2, cy: y + height / 2, rtl: getComputedStyle(e).direction === 'rtl', name: e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') }; });
+    if (kind !== 'scroll') await el.scrollIntoViewIfNeeded().catch(() => {});
+    const b = await box(), shot = ({ x, y, width, height }) => page.screenshot({ fullPage: true, clip: { x, y, width, height } }); if (b.width < 1 || b.height < 1) continue;
+    const before = await shot(b), m = page.mouse;
+    if (kind === 'scroll') await page.evaluate(() => scrollBy(0, innerHeight)); else if (kind === 'tap') await m.click(b.cx, b.cy); else { await m.move(b.cx, b.cy); await m.down(); await m.move(b.cx + (b.rtl ? 200 : -200), b.cy, { steps: 10 }); await m.up(); }
+    await page.waitForTimeout(400); if (before.equals(await shot(await box()))) res.findings.push({ level: 'FAIL', id: 'mechanic-still', msg: `the [data-mechanic="${kind}"] box ${b.name} did not change after ${act} at ${r.w}; wire the mechanic so its one action changes the box` });
+    await page.evaluate(() => scrollTo(0, 0)); await page.reload({ waitUntil: 'load' }); await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(1500);
+  }
+  // contrast-ground: shots with and without text, 5th and 95th percentile of the ground.
   if (res.ground.length && !r.reduce) try {
     const full = png(await page.screenshot()); await page.addStyleTag({ content: '*,*::before,*::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;caret-color:transparent!important;transition:none!important}text,tspan,textPath{fill:transparent!important;stroke:transparent!important}' });
     await page.waitForTimeout(80); const bare = png(await page.screenshot()), low = [];
@@ -541,12 +554,12 @@ for (const r of runs) {
   report.push({ run: `${r.lang}-${r.w}${r.reduce ? '-reduced' : ''}${r.state ? '-state-' + r.state : ''}`, lang: r.lang, width: r.w, reduced: r.reduce, ...(r.state ? { state: r.state } : {}), ...res }); await page.close();
 }
 await browser.close();
-const loaded = new Set(report.flatMap((x) => x.measured.loadedFonts)), has = (s) => report.some((x) => x.measured.scripts?.[s]);
+const loaded = new Set(report.flatMap((x) => x.measured.loadedFonts)), has = (s) => report.some((x) => x.measured.scripts?.[s] && (s === 'arabic' || !/^(ar|fa|ur|he|ps|ckb|yi)\b/i.test(x.measured.lang || x.lang)));
 for (const [k, f] of tokenFonts) if (!loaded.has(f) && has(k.startsWith('arabic') ? 'arabic' : 'latin')) report[0].findings.push({ level: k === 'arabicDisplay' ? 'WARN' : 'FAIL', id: 'font-not-loaded', msg: `${f} (${k}) never loaded in any run (missing link, wrong name, or unused); screenshots show a fallback` });
 const ids = (lvl) => [...new Set(report.flatMap((x) => x.findings.filter((f) => f.level === lvl).map((f) => f.id)))];
 const failIds = ids('FAIL'), warnIds = ids('WARN'), fails = failIds.length, views = report.filter((x) => !x.reduced && !x.state), wide = views.filter((x) => x.width >= 1440);
 const pct = (v) => Math.round(v * 100) + '%';
-// The numbers the server checks: the 1440 default view (worst language), the worst run for sizes, small share and body.
+// The server's numbers: 1440 default view, worst run for sizes, small share, body.
 const defaultView = ![target, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u)));
 const bodies = views.map((x) => x.measured.bodyPx).filter((n) => typeof n === 'number' && n > 0);
 const measure = defaultView && wide.length && bodies.length ? { fails, textElements: Math.max(0, ...wide.map((x) => x.measured.textElements)), controls: Math.max(0, ...wide.map((x) => x.measured.controls)), fontSizes: Math.max(0, ...views.map((x) => x.measured.fontSizes)), smallShare: Math.max(0, ...views.map((x) => x.measured.smallShare)), bodyPx: Math.min(...bodies), languages } : null;
@@ -555,7 +568,7 @@ const narrow = views.filter((x) => x.width < 640), phone = narrow.length ? { tex
 const summary = { tool: 'gb-measure', version: 2, phone, phoneFirst, target: target || urlFor, at: new Date().toISOString(), languages, density: dense ? 'dense' : 'default', scale: { look: scale, display, heroFigure: heroFigurePx }, fails, warns: warnIds.length, failIds, warnIds, measure,
   budgets: { textElements: { 1440: cap[1440][0], 390: cap[390][0] }, controls: { 1440: cap[1440][1], 390: cap[390][1] }, fontSizes: 5, smallShare: 0.1, tinyText: 0, bodyPx: { en: 16, ar: 17 }, listItems: 8, microLabels: 2 },
   states: stateIds, runs: report.map((x) => ({ run: x.run, lang: x.lang, width: x.width, ...(x.reduced || x.state ? { ...(x.reduced ? { reduced: true } : { state: x.state }) } : { textElements: x.measured.textElements, controls: x.measured.controls, fontSizes: x.measured.fontSizes, sizes: x.measured.sizes, smallShare: x.measured.smallShare, bodyPx: x.measured.bodyPx, tinyText: x.measured.tinyText, listMax: x.measured.listMax, microLabels: x.measured.microLabels, arabicChars: x.measured.arabicChars, dir: x.measured.dir }), fails: [...new Set(x.findings.filter((f) => f.level === 'FAIL').map((f) => f.id))], warns: [...new Set(x.findings.filter((f) => f.level === 'WARN').map((f) => f.id))] })) };
-// measure.json (measure-data-worst.json for ?data=worst) goes next to the shots.
+// measure.json goes next to the shots.
 const extra = (() => { try { const q = String(target || '').split('?')[1]; return q ? [...new URLSearchParams(q)].filter(([k]) => !/^(lang|shot)$/.test(k)).map(([k, v]) => `-${k}-${v}`).join('').replace(/[^\w-]/g, '') : ''; } catch { return ''; } })();
 const jsonPath = join(resolve(outDir || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), `measure${extra}.json`);
 try { mkdirSync(resolve(jsonPath, '..'), { recursive: true }); writeFileSync(jsonPath, JSON.stringify(summary, null, 1)); } catch (e) { console.error('could not write ' + jsonPath + ': ' + e.message); }
@@ -568,11 +581,10 @@ else {
 if (measure) console.log(`${fails} failing check(s): text ${measure.textElements}/${cap[1440][0]}, controls ${measure.controls}/${cap[1440][1]}${phone ? ` (390: text ${phone.textElements}/${cap[390][0]}, controls ${phone.controls}/${cap[390][1]})` : ''}, sizes ${measure.fontSizes}/5, small ${pct(measure.smallShare)}/10%, body ${measure.bodyPx}px. Summary: ${jsonPath}`);
 else console.log(`${fails} failing check(s). No measure for add_to_canvas: ${!defaultView ? 'this run was a ?state or ?data view' : 'no 1440 run found body text'}; measure the rendered default view (no ?state or ?data) for it. Summary: ${jsonPath}`);
 console.log(fails ? 'Never show or place this draft while a FAIL stands: fix it and measure again.' : 'Numbers are evidence for the craft check; they never replace looking side by side.');
-// The checked stamp for the plugin's publish gate.
 if (target && !/^https?:/.test(target)) try {
   const fp = target.startsWith('file:') ? fileURLToPath(target.split('?')[0]) : resolve(target.split('?')[0]), dir = join(process.env.TMPDIR || '/tmp', 'gb'), sp = join(dir, 'checked.json');
   mkdirSync(dir, { recursive: true }); let st = {}; try { st = JSON.parse(readFileSync(sp, 'utf8')); } catch {}
-  const prev = st[fp], mtimeMs = statSync(fp).mtimeMs; // same mtime: the default and the worst case run of one round, so the worse one counts
+  const prev = st[fp], mtimeMs = statSync(fp).mtimeMs; // same mtime: the worse run counts
   st[fp] = { mtimeMs, fails: prev?.mtimeMs === mtimeMs ? Math.max(prev.fails, fails) : fails, at: Date.now(), summary: jsonPath }; writeFileSync(sp, JSON.stringify(st));
 } catch {}
 process.exit(fails ? 1 : 0);

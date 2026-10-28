@@ -1,4 +1,4 @@
-// gb-compare: do the drafts on one board look alike? Renders each at 1440x900 (the default view, &shot=1) in each language.
+// gb-compare: do a board's drafts look alike? Each at 1440x900 (default view, &shot=1) per language.
 //   node gb-compare.mjs <a.html|url> <b.html|url> [more] [--tokens a.json[,b.json...]] [--languages ar,en] [--same-direction] [--out dir] [--json]
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
@@ -12,22 +12,22 @@ export function oklab([r, g, b]) {
   return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
 }
 export const groundDE = (a, b) => { if (!a || !b) return null; const [x, y] = [oklab(a), oklab(b)]; return Math.round(Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]) * 1000) / 10; };
-// Shared cells of two header signatures, each cell counted once per match.
+// Shared header cells, each counted once.
 export const headerOverlap = (a = [], b = []) => { const left = [...b]; let n = 0; for (const c of a) { const i = left.indexOf(c); if (i >= 0) { left.splice(i, 1); n++; } } return n; };
 const same = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 export function tells(a, b) {
   const de = groundDE(a.ground?.rgb, b.ground?.rgb), dl = a.largestPx != null && b.largestPx != null ? Math.abs(a.largestPx - b.largestPx) : null, ho = headerOverlap(a.header, b.header);
   const t = {
     ground: { value: de, hit: de != null && de < LIMITS.groundDE },
-    body: { value: same(a.bodyFace, b.bodyFace) ? a.bodyFace : `${a.bodyFace} / ${b.bodyFace}`, hit: same(a.bodyFace, b.bodyFace) },
-    display: { value: same(a.displayFace, b.displayFace) ? a.displayFace : `${a.displayFace} / ${b.displayFace}`, hit: same(a.displayFace, b.displayFace) },
+    // Faces are shown, never counted: every direction takes the taste's type voice.
+    body: { value: same(a.bodyFace, b.bodyFace) ? a.bodyFace : `${a.bodyFace} / ${b.bodyFace}`, same: same(a.bodyFace, b.bodyFace) },
+    display: { value: same(a.displayFace, b.displayFace) ? a.displayFace : `${a.displayFace} / ${b.displayFace}`, same: same(a.displayFace, b.displayFace) },
     largest: { value: dl, hit: dl != null && dl <= LIMITS.largestPx },
     header: { value: ho, hit: ho >= LIMITS.header },
   };
   const count = Object.values(t).filter((x) => x.hit).length;
   return { tells: t, count, verdict: count >= LIMITS.tells ? 'FAIL' : 'ok' };
 }
-// Every pair over every language both were measured in; the worst language decides. One direction: verdict "same-direction".
 export function comparePairs(looks, directionOf = {}) {
   const names = [...new Set(looks.map((l) => l.name))], pairs = [], ok = (l) => !l.error && !l.skipped;
   const dir = (n) => directionOf[n] || looks.find((l) => l.name === n && l.direction)?.direction || null;
@@ -39,7 +39,6 @@ export function comparePairs(looks, directionOf = {}) {
   return pairs.sort((x, y) => y.count - x.count);
 }
 
-// Runs inside the page at 1440x900.
 function LOOK() {
   const W = innerWidth, H = innerHeight, html = document.documentElement;
   const cx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
@@ -47,7 +46,7 @@ function LOOK() {
   const hex = (c) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
   const skip = (e) => e.closest('script,style,noscript,template,[hidden],[inert],[aria-hidden="true"],.gb-switch,.sr-only,.visually-hidden');
   const opac = (e) => { let o = 1; for (let p = e; p && p !== html; p = p.parentElement) o *= +getComputedStyle(p).opacity; return o; };
-  // The face that draws a text: the first family that is a generic, a loaded web font covering it, or an installed font.
+  // The face that draws a text: a generic, a loaded web font covering it, or an installed font.
   const GENERIC = /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-serif|ui-sans-serif|ui-monospace|ui-rounded|math)$/i, faces = [...document.fonts];
   const ranges = (s) => String(s || 'U+0-10FFFF').split(',').map((r) => { const m = r.trim().replace(/^U\+/i, ''); if (m.includes('?')) return [parseInt(m.replace(/\?/g, '0'), 16), parseInt(m.replace(/\?/g, 'F'), 16)]; const [a, b] = m.split('-'); return [parseInt(a, 16), parseInt(b ?? a, 16)]; });
   const sysOk = new Map(), installed = (fam) => { if (!sysOk.has(fam)) { const w = (f) => { cx.font = `40px ${f}`; return cx.measureText('mmmwwwlli 0123').width; }; sysOk.set(fam, ['monospace', 'serif'].some((g) => w(`"${fam}", ${g}`) !== w(g))); } return sysOk.get(fam); };
@@ -62,7 +61,7 @@ function LOOK() {
     }
     return 'default';
   };
-  // Every visible text run, grouped by its element; first: on the first screen.
+  // Visible text runs by element; first: on the first screen.
   const rg = document.createRange(), map = new Map(), tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = tw.nextNode(); n; n = tw.nextNode()) {
     const t = n.nodeValue.replace(/\s+/g, ' ').trim(), el = n.parentElement; if (!t || !el || skip(el)) continue;
@@ -77,7 +76,7 @@ function LOOK() {
   const shown = (h1 && T.find((e) => h1.contains(e.el))) || big;
   const tally = new Map(); for (const e of T) { if (e.el.closest('h1,h2,h3,h4,h5,h6,[role="heading"]') || e.size >= 24 || e.size < 12) continue; const f = faceOf(e.cs.fontFamily, e.text); tally.set(f, (tally.get(f) || 0) + e.text.length); }
   const bodyFace = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  // The ground: a 16 x 10 grid of points, each for the nearest painted box of a quarter screen or more, else the page.
+  // The ground: 16 x 10 points, each the nearest painted box of a quarter screen or more.
   const paintOf = (e) => {
     const cs = getComputedStyle(e), bg = rgba(cs.backgroundColor), under = bg[3] > 0 ? bg : [255, 255, 255, 1];
     if (/gradient\(/.test(cs.backgroundImage)) { const stops = (cs.backgroundImage.match(/(?:rgba?|hsla?|oklch|oklab|lab|lch|color)\([^()]*\)|#[0-9a-f]{3,8}\b/gi) || []).map(rgba); if (stops.length) return { rgb: [0, 1, 2].map((i) => stops.reduce((s, c) => s + c[i] * c[3] + under[i] * (1 - c[3]), 0) / stops.length), kind: 'gradient' }; }
@@ -96,7 +95,7 @@ function LOOK() {
   }
   const [gEl, gVotes] = [...votes.entries()].sort((a, b) => b[1] - a[1])[0], gPaint = gEl === 'page' ? root : paintOf(gEl);
   const sel = (e) => e === 'page' ? 'page' : e.tagName.toLowerCase() + (typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/)[0] : '');
-  // The header signature: the first 6 text or control elements of the first screen, as cells.
+  // Header signature: the first 6 text or control elements, as cells.
   const CTL = 'a[href],button,input:not([type=hidden]),select,textarea,[role=button],[role=link],[role=tab],[role=switch],[role=checkbox]';
   const items = new Set(); for (const e of first) items.add(e.el.closest(CTL) || e.el);
   for (const c of document.querySelectorAll(CTL)) { if (skip(c) || getComputedStyle(c).visibility === 'hidden' || opac(c) < 0.1) continue; const r = c.getBoundingClientRect(); if (r.width >= 1 && r.height >= 1 && onFirst(r)) items.add(c); }
@@ -121,7 +120,7 @@ async function main() {
   const languages = langArg.length ? langArg : tokenLangs.length ? tokenLangs : ['ar', 'en'];
   const req = createRequire(import.meta.url);
   let pw; try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); }
-  // A draft's name: its file name, or its folder's name for an index.html.
+  // A draft's name: its file name, or its folder's for index.html.
   const nameOf = (t) => { const p = t.split('?')[0].replace(/\/$/, ''), b = basename(p); return /^index\.html?$/i.test(b) ? basename(dirname(p)) : b; };
   const names = targets.map(nameOf).map((n, i, all) => (all.indexOf(n) === i ? n : `${n}-${i + 1}`));
   const directionOf = Object.fromEntries(names.map((n, i) => [n, sameAll ? 'all' : tokenFiles.length ? (tokenFiles.length === 1 ? 'tokens:' + tokenFiles[0] : tokens[i].direction ? 'direction:' + tokens[i].direction : 'tokens:' + tokenFiles[i]) : null]).filter(([, d]) => d));
@@ -138,8 +137,8 @@ async function main() {
   await browser.close();
   looks.sort((a, b) => names.indexOf(a.name) - names.indexOf(b.name) || languages.indexOf(a.lang) - languages.indexOf(b.lang));
   const pairs = comparePairs(looks, directionOf), findings = [];
-  const why = (t) => [t.ground.hit && `ground dE ${t.ground.value}`, t.body.hit && `same body face ${t.body.value}`, t.display.hit && `same display face ${t.display.value}`, t.largest.hit && `largest text ${t.largest.value}px apart`, t.header.hit && `header shares ${t.header.value} of 6 cells`].filter(Boolean).join(', ');
-  for (const p of pairs.filter((x) => x.verdict === 'FAIL')) findings.push(`FAIL too-alike: ${p.a} and ${p.b} share ${p.count} of 5 tells in ${p.lang} (${why(p.tells)}); set them apart by composition and the signature viz, within each draft's own tokens (never by swapping fonts or colours), never copy the other`);
+  const why = (t) => [t.ground.hit && `ground dE ${t.ground.value}`, t.largest.hit && `largest text ${t.largest.value}px apart`, t.header.hit && `header shares ${t.header.value} of 6 cells`].filter(Boolean).join(', ');
+  for (const p of pairs.filter((x) => x.verdict === 'FAIL')) findings.push(`FAIL too-alike: ${p.a} and ${p.b} share ${p.count} of 3 tells in ${p.lang} (${why(p.tells)}); set them apart by composition and the signature viz, within each draft's own tokens (never by swapping fonts or colours), never copy the other`);
   for (const l of looks.filter((x) => x.error)) findings.push(`FAIL ${l.name} (${l.lang}): ${l.error}`);
   for (const n of names) if (looks.filter((l) => l.name === n).every((l) => l.skipped || l.error) && looks.some((l) => l.name === n && l.skipped)) findings.push(`FAIL ${n}: no language rendered (${looks.find((l) => l.name === n && l.skipped).skipped}); pass --languages or --tokens`);
   const fails = findings.length, summary = { tool: 'gb-compare', version: 2, at: new Date().toISOString(), viewport: [1440, 900], languages, limits: LIMITS, fails, drafts: looks, pairs, findings };
@@ -154,7 +153,7 @@ async function main() {
     const mark = (x, s) => `${s}${x.hit ? '*' : ''}`;
     console.log(`\nPairs, most alike first (* is a tell; ${LIMITS.tells} or more FAIL; same direction: versions of one direction, never FAIL):`);
     console.log(`${pad('pair', 2 * w + 3)}${pad('lang', 5)}${pad('ground dE', 10)}${pad('body', 7)}${pad('display', 8)}${pad('largest', 8)}${pad('header', 7)}tells`);
-    for (const p of pairs) console.log(`${pad(`${p.a} / ${p.b}`, 2 * w + 3)}${pad(p.lang, 5)}${pad(mark(p.tells.ground, p.tells.ground.value ?? '-'), 10)}${pad(mark(p.tells.body, p.tells.body.hit ? 'same' : 'diff'), 7)}${pad(mark(p.tells.display, p.tells.display.hit ? 'same' : 'diff'), 8)}${pad(mark(p.tells.largest, p.tells.largest.value == null ? '-' : p.tells.largest.value + 'px'), 8)}${pad(mark(p.tells.header, p.tells.header.value + '/6'), 7)}${p.count} ${p.verdict}${p.verdict === 'same-direction' ? ' (skipped)' : ''}`);
+    for (const p of pairs) console.log(`${pad(`${p.a} / ${p.b}`, 2 * w + 3)}${pad(p.lang, 5)}${pad(mark(p.tells.ground, p.tells.ground.value ?? '-'), 10)}${pad(p.tells.body.same ? 'same' : 'diff', 7)}${pad(p.tells.display.same ? 'same' : 'diff', 8)}${pad(mark(p.tells.largest, p.tells.largest.value == null ? '-' : p.tells.largest.value + 'px'), 8)}${pad(mark(p.tells.header, p.tells.header.value + '/6'), 7)}${p.count} ${p.verdict}${p.verdict === 'same-direction' ? ' (skipped)' : ''}`);
     for (const f of findings) console.log(f);
     console.log(`${fails} failing check(s). Summary: ${jsonPath}`);
   }

@@ -1,15 +1,14 @@
-// gb-frames: see a video or GIF reference as one contact sheet of frames, each labelled with its time, made on this machine.
+// gb-frames: a video or GIF reference as one sheet of time-labelled frames, made here.
 //   node gb-frames.mjs <post or page url | video file> [--frames 12] [--max 20] [--out <dir>] [--name <file>]
-// Sources in order: X posts (the post's own mp4), Dribbble, Pinterest, any page with og:video or <video src>; YouTube,
-// Vimeo, Instagram and TikTok only through yt-dlp. The video stays in a temp folder and is deleted after the sheet.
-// Exit 0 sheet made, 1 the source gave no video, 2 usage, 3 this machine cannot (no ffmpeg, or the network is blocked).
+// X, Dribbble, Pinterest, og:video or <video> pages; YouTube, Vimeo, Instagram, TikTok via yt-dlp. Temp video, deleted.
+// Exit 0 sheet, 1 no video, 2 usage, 3 no ffmpeg or network blocked.
 import { spawnSync } from 'node:child_process'; import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
 
 export const LIMITS = { frames: 12, maxSeconds: 20, minGap: 0.08, sheetPx: 1600, sheetBytes: 900_000, videoBytes: 80_000_000 };
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
 
-// Where a URL's video comes from; a path to a file on disk is read as it is.
+// Where a URL's video comes from; a file path is read as it is.
 export function sourceOf(input) {
   let u; try { u = new URL(input); } catch { return existsSync(String(input)) ? { kind: 'file', path: resolve(input) } : null; }
   if (!/^https?:$/.test(u.protocol)) return null;
@@ -23,7 +22,7 @@ export function sourceOf(input) {
   return { kind: 'page', host, url: u.href };
 }
 
-// The mp4 to fetch from a syndication tweet-result: the smallest at 480 wide or more, else the smallest.
+// The tweet's mp4: the smallest 480 wide or more, else the smallest.
 const widthOf = (url) => +(/\/(\d{2,5})x\d{2,5}\//.exec(url)?.[1] || 0);
 export function pickVariant(tweet) {
   const media = [...(tweet?.mediaDetails || []), ...(tweet?.quoted_tweet?.mediaDetails || [])].filter((m) => /^(video|animated_gif)$/.test(m?.type));
@@ -34,21 +33,20 @@ export function pickVariant(tweet) {
   return { url: v.url, media: m.type === 'animated_gif' ? 'GIF' : 'video', width: widthOf(v.url) || null, duration: m.video_info.duration_millis ? m.video_info.duration_millis / 1000 : null, count: media.length };
 }
 
-// The times of N frames spread over the first maxSeconds, at least minGap apart, each in the middle of its slice.
+// N frame times over the first maxSeconds, minGap apart, mid slice.
 export function frameTimes(duration, count = LIMITS.frames, maxSeconds = LIMITS.maxSeconds) {
   const d = Number(duration) > 0 ? Number(duration) : 0, window = Math.min(d, maxSeconds);
   const n = Math.max(1, Math.min(count, Math.floor(window / LIMITS.minGap) || 1));
   return { times: Array.from({ length: n }, (_, i) => Math.round((window * (i + 0.5)) / n * 100) / 100), window, capped: d > maxSeconds };
 }
 
-// Columns, rows and tile size so the whole sheet stays within sheetPx on both sides (aspect is height over width).
+// Columns, rows and tile size within sheetPx (aspect: height over width).
 export function grid(n, aspect = 1) {
   const cols = n <= 3 ? n : n === 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.ceil(n / cols), pad = 6, a = aspect > 0 ? aspect : 1;
   const fit = (k) => (LIMITS.sheetPx - pad * (k + 1)) / k, w = Math.floor(Math.min(360, fit(cols), fit(rows) / a) / 2) * 2;
   return { cols, rows, pad, w, h: Math.max(2, Math.round((w * a) / 2) * 2) };
 }
 
-// Duration and size from ffmpeg's own report on an input (ffmpeg -i file), so no ffprobe is needed.
 export function probeInfo(text) {
   const d = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(text), s = /Video: [^\n]*?[ ,](\d{2,5})x(\d{2,5})[ ,\n]/.exec(text + '\n');
   const turned = /rotat(?:e|ion)[^\n]*?-?\b90\b|rotat(?:e|ion)[^\n]*?270/i.test(text);
@@ -56,7 +54,7 @@ export function probeInfo(text) {
   return { duration: d ? +d[1] * 3600 + +d[2] * 60 + +d[3] : null, width: turned ? h : w, height: turned ? w : h };
 }
 
-// Every video URL a page names: og:video, twitter:player:stream, <video>/<source> src, then any mp4 or m3u8 link in its markup.
+// og:video, twitter:player:stream, <video> src, any mp4 or m3u8 link.
 export function videoInPage(html, base) {
   const abs = (s) => { try { return new URL(s.replace(/&amp;/g, '&').replace(/\\u002F/gi, '/').replace(/\\\//g, '/'), base).href; } catch { return null; } };
   const metas = [...html.matchAll(/<meta\b[^>]*>/gi)].map((m) => m[0]).filter((t) => /(?:property|name)=["'](?:og:video(?::secure_url|:url)?|twitter:player:stream)["']/i.test(t)).map((t) => /content=["']([^"']+)/i.exec(t)?.[1]);
@@ -71,7 +69,7 @@ const run = (bin, args, o = {}) => spawnSync(bin, args, { encoding: 'utf8', maxB
 const python = () => ['python3', 'python'].find((p) => run(p, ['--version']).status === 0) || null;
 const pipInstall = (py, pkg) => { console.error(`Installing the ${pkg} Python package (pip, user install)...`); const a = ['-m', 'pip', 'install', '--user', '-q', pkg]; return run(py, a, { timeout: 180_000 }).status === 0 || run(py, [...a, '--break-system-packages'], { timeout: 180_000 }).status === 0; };
 
-// ffmpeg on PATH, else the imageio-ffmpeg package's binary (pip reaches package hosts in sandboxes that block the rest).
+// ffmpeg on PATH, else imageio-ffmpeg's binary.
 function findFfmpeg() {
   const ok = (b) => !!b && run(b, ['-version'], { stdio: 'ignore' }).status === 0;
   for (const b of [process.env.FFMPEG, 'ffmpeg']) if (ok(b)) return b;
@@ -81,7 +79,7 @@ function findFfmpeg() {
   return ok(b) ? b : null;
 }
 
-// One GET with curl (it follows the machine's proxy settings), else Node's fetch. file: write the body there.
+// curl (it follows the proxy), else fetch.
 async function get(url, file, max = LIMITS.videoBytes) {
   const r = run('curl', ['-sSL', '--max-time', '90', '--max-filesize', String(max), '-A', UA, '-w', '\n%{http_code}', '-o', file || '-', url]);
   if (!r.error) {
@@ -94,7 +92,7 @@ async function get(url, file, max = LIMITS.videoBytes) {
     return { status: res.status, body: file && res.ok ? '' : buf.toString('utf8'), err: '' };
   } catch (e) { return { status: 0, body: '', err: String(e?.cause?.message || e.message) }; }
 }
-// A sandbox proxy that denies the host: a 403 naming its allowlist, or a refused CONNECT (curl hides that body).
+// A proxy that denies the host: a 403 naming its allowlist, or a refused CONNECT.
 const blocked = (r) => /blocked-by-allowlist|allowlist/i.test(r.body) || /CONNECT tunnel failed, response 40[37]/i.test(r.err);
 function check(r, url, what, src) {
   if (blocked(r)) {
@@ -104,7 +102,6 @@ function check(r, url, what, src) {
   if (r.status < 200 || r.status > 299) throw new Stop(1, `Cannot read this source: ${what} gave ${r.status ? 'HTTP ' + r.status : r.err || 'no answer'} (${url}).`);
 }
 
-// Fetch the source's video to `file`. Returns what the output says about it.
 async function fetchVideo(src, file, ff, maxS) {
   if (src.kind === 'file') return { path: src.path, label: src.path, media: 'video', name: src.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '') };
   if (src.kind === 'x') {
@@ -178,7 +175,7 @@ async function main() {
       const frame = (lab) => run(ff, ['-loglevel', 'error', '-y', '-ss', String(t), '-i', video, '-frames:v', '1', '-vf', `scale=${g.w}:${g.h}${lab ? label(t) : ''}`, join(work, `f${String(i).padStart(3, '0')}.png`)]);
       let r = frame(labelled);
       if (r.status !== 0 && labelled) { labelled = false; r = frame(false); }
-      // A time past the file's real last frame writes nothing: take the frame a little earlier.
+      // Past the last frame nothing is written: take one a little earlier.
       if (r.status === 0 && !existsSync(join(work, `f${String(i).padStart(3, '0')}.png`)) && t > 0.3) { times[i] = t = Math.round((t - 0.3) * 100) / 100; r = frame(labelled); }
       if (r.status !== 0 || !existsSync(join(work, `f${String(i).padStart(3, '0')}.png`))) throw new Stop(1, `Cannot read this source: ffmpeg could not take the frame at ${t} s (${(r.stderr || 'no frame there').trim().split('\n').pop()}).`);
     }

@@ -1,14 +1,28 @@
-// GoBanana motion, phone and type lint. No dependencies. Usage: node gb-lint.mjs drafts/<slug>.html [--tokens tokens.json]
-import { readFileSync } from "node:fs";
+// gb-lint: motion, phone and type. node gb-lint.mjs drafts/<slug>.html [--tokens tokens.json] [--fix]
+// --fix: 100vh, tap highlight, viewport-fit=cover and a missing <head> only, a FIXED line each, then the lint.
+import { readFileSync, writeFileSync } from "node:fs";
 const argv = process.argv.slice(2), ti = argv.indexOf("--tokens"), file = argv.find((a, i) => !a.startsWith("--") && (ti < 0 || i !== ti + 1));
-const src = readFileSync(file, "utf8");
-// With --tokens, the token families decide the script: fonts.arabic and arabicDisplay are Arabic, display and text Latin.
+let src = readFileSync(file, "utf8");
+const styleText = (s) => (/<style/i.test(s) ? [...s.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n") : s);
+if (argv.includes("--fix")) {
+  const fixed = [], was = src, TAP = "html{-webkit-tap-highlight-color:transparent}", styled = /<style/i.test(src);
+  let n = 0, t = src; const dvh = (c) => c.replace(/\b100vh\b/g, () => (n++, "100dvh"));
+  if (/<[a-z!]/i.test(src) && !/<head(?=[\s>])/i.test(src)) { const h = (src.match(/<html(?=[\s>])[^>]*>/i) || [])[0]; src = h ? src.replace(h, (m) => m + "<head></head>") : src.replace(/^(\s*<!doctype[^>]*>\s*)?/i, (d) => (d || "") + "<head></head>\n"); fixed.push(h ? "head: no <head>, added one after <html>" : "head: no <head> or <html>, added <head> at the top"); }
+  src = styled ? src.replace(/(<style[^>]*>)([\s\S]*?<\/style>)/gi, (_, a, c) => a + dvh(c)) : dvh(src);
+  if (n) fixed.push(`100vh: ${n} now 100dvh`);
+  if (!/-webkit-tap-highlight-color\s*:\s*transparent/.test(styleText(src))) { t = src; src = styled ? src.replace(/<\/style>(?![\s\S]*<\/style>)/i, TAP + "\n</style>") : /<\/head>/i.test(src) ? src.replace(/<\/head>/i, `<style>${TAP}</style>\n</head>`) : /<html/i.test(src) ? src : TAP + "\n" + src; if (src !== t) fixed.push(`tap highlight: ${TAP} added`); }
+  const vp = (src.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0]; t = src;
+  if (/<html/i.test(src) && !/viewport-fit=cover/.test(vp)) src = vp ? src.replace(vp, () => vp.replace(/content=(["'])([^"']*)\1/i, (_, q, v) => `content=${q}${v.replace(/[\s,;]+$/, "")}, viewport-fit=cover${q}`)) : src.replace(/<head(?=[\s>])[^>]*>/i, (h) => `${h}<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n`);
+  if (src !== t) fixed.push(`viewport: viewport-fit=cover added${vp ? "" : " in a new viewport line"}`);
+  if (src !== was) { writeFileSync(file, src); for (const f of fixed) console.log(`FIXED ${f}`); }
+}
+// --tokens: fonts.arabic and arabicDisplay are Arabic, display and text Latin.
 let tokenFonts = {}; try { if (ti >= 0) tokenFonts = JSON.parse(readFileSync(argv[ti + 1], "utf8")).fonts || {}; } catch {}
 const famKey = (f) => String(f || "").split(",")[0].replace(/["']/g, "").trim().toLowerCase();
-const css = /<style/i.test(src) ? [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n") : src;
+const css = styleText(src);
 const out = [];
 const add = (rule, at, lvl = "FAIL") => out.push(`${lvl} ${rule}: ${at.trim().slice(0, 90)}`);
-// Type: custom properties resolved, rem at 16px; 3 or more rules under 14px FAIL (fewer WARN), fine print and svg aside.
+// Type: 3 or more rules under 14px FAIL (fewer WARN), fine print and svg aside.
 const vars = new Map([...css.matchAll(/(--[\w-]+)\s*:\s*([^;}]+)/g)].map((m) => [m[1], m[2].trim()]).reverse());
 const rv = (v, d = 0) => (d > 4 ? v : v.replace(/var\(\s*(--[\w-]+)\s*(?:,([^)]*))?\)/g, (_, n, fb) => rv(vars.get(n) ?? fb ?? "", d + 1)));
 const px = (v) => { const m = String(v).trim().match(/^([\d.]+)(px|rem)$/i); return m ? +m[1] * (/rem/i.test(m[2]) ? 16 : 1) : null; };
@@ -20,14 +34,14 @@ const GENERIC = /^(serif|sans-serif|monospace|cursive|system-ui|ui-[\w-]+|emoji|
 const families = new Set(), small = [];
 const FINE_PRINT = /^(?:.*[\s>+~])?(?:small|svg|tspan|text)(?:[.:#[].*)?$|\.(?:legal|fine)(?![\w-])|(?:^|[\s>+~])svg(?![\w-])/i;
 const finePrint = (sel) => sel.split(",").every((part) => FINE_PRINT.test(part.trim()));
-// Walk blocks, keeping the stack of at-rules around each rule; @import, @charset and @namespace first.
+// Walk blocks with the stack of at-rules around each; @import, @charset, @namespace out first.
 const stack = []; let buf = "";
 for (const ch of css.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@(?:import|charset|namespace)\b(?:"[^"]*"|'[^']*'|\([^)]*\)|[^;"'(])*;/gi, "")) {
   if (ch === ";" && !stack.length) { buf = ""; continue; }
   if (ch === "{") { stack.push(buf.trim()); buf = ""; continue; }
   if (ch === "}") {
     const sel = stack.pop() ?? ""; const body = buf; buf = "";
-    if (sel.startsWith("@")) continue; // an at-rule prelude such as @media (hover:hover), not a selector
+    if (sel.startsWith("@")) continue; // an at-rule prelude, not a selector
     const media = stack.join(" ");
     if (/gb-switch/.test(sel)) continue; // the variant switcher is dev chrome
     if (!/\bprint\b/.test(media)) {
@@ -63,6 +77,7 @@ if (/(transition|animation)\s*:/.test(css) && !/prefers-reduced-motion/.test(css
 if (!/-webkit-tap-highlight-color\s*:\s*transparent/.test(css)) add("tap highlight not removed", "html { -webkit-tap-highlight-color: transparent }");
 const vp = (src.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0];
 if (/<html/i.test(src)) {
+  if (!/<head(?=[\s>])/i.test(src)) add("no <head>", "the viewport and tap highlight need one; add it after <html>, or run --fix");
   if (!/viewport-fit=cover/.test(vp)) add("viewport", "add viewport-fit=cover");
   if (/maximum-scale|user-scalable\s*=\s*no/.test(vp)) add("zoom blocked", "remove maximum-scale and user-scalable=no (SC 1.4.4)");
 }

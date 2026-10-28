@@ -1,4 +1,4 @@
-// gb-shoot: every render-loop screenshot in one run of one browser, four pages at a time, plus contact sheets of the state shots.
+// gb-shoot: every render-loop shot in one browser, 4 pages at a time, and contact sheets of state shots.
 //   node gb-shoot.mjs <file.html|url> [--ar <url> --en <url>] [--out <dir>] [--tokens tokens.json] [--languages ar,en] [--states empty,loading,error] [--lang ar] [--variants 3]
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
@@ -28,7 +28,7 @@ const url = (lang, params) => {
   u.searchParams.set('shot', '1'); return u.href;
 };
 const browser = await pw.chromium.launch(), failed = [], figFails = [];
-// The default view at 390 first: which states are one item's (markers), where one marker of each sits, and the hero figure.
+// The 390 default view first: marker states, one marker of each, the hero figure.
 const FIGURE = ({ px = 0, list = [] } = {}) => {
   const vis = (e) => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e); return r.width >= 1 && r.height >= 1 && cs.visibility !== 'hidden' && +cs.opacity > 0.05 && !e.closest('[hidden],.gb-switch'); };
   const num = (t) => /\d/.test(t) && t.replace(/[\d\s.,:%+\-\u2212/()]/g, '').length <= 3;
@@ -59,14 +59,14 @@ const take = async (s) => {
     if (/^(loading|error)$/.test(s.params.state || '')) { const f = (await page.evaluate(FIGURE, { px: probe.tagged ? 0 : probe.figure?.px || 9999 })).figure; if (f && (probe.figure || probe.tagged) && !(s.params.state === 'error' && f.stale)) figFails.push(`${s.file} still shows the figure "${f.text}" (${f.px}px)`); }
     const m = s.marker, pad = 24, clip = m && { x: Math.max(0, m.x - pad), y: Math.max(0, m.y - pad), width: Math.min(s.w, m.width + 2 * pad), height: m.height + 2 * pad };
     s.png = await page.screenshot({ path: join(out, s.file + '.png'), fullPage: !!s.full || !!m, ...(m ? { clip } : {}) });
-    // A state's change can sit below the fold (a selected subtotal): compare the full page too.
+    // A change can sit below the fold: compare the full page too.
     if (s.sheet) s.fullPng = await page.screenshot({ fullPage: true });
     if (s.upload) for (const quality of [82, 72, 62, 50]) { const jpg = await page.screenshot({ type: 'jpeg', quality }); if (jpg.length <= 900 * 1024 || quality === 50) { writeFileSync(join(out, s.upload), jpg); s.jpgKB = Math.round(jpg.length / 1024); break; } }
   } catch (e) { failed.push(`${s.file}: ${String(e.message || e).split('\n')[0]}`); s.missing = true; } finally { await page.close(); }
 };
 for (let i = 0; i < shots.length; i += 4) await Promise.all(shots.slice(i, i + 4).map(take));
 
-// Contact sheets: state shots at their own size, 8 to a sheet; the marker crops on a sheet of their own.
+// Contact sheets: 8 state shots a sheet; marker crops on their own.
 const tiles = shots.filter((s) => s.sheet && !s.missing), sheets = [], marks = shots.filter((s) => s.marker && !s.missing);
 if (marks.length) {
   const html = join(out, 'sheet-markers.html');
@@ -92,7 +92,7 @@ const ups = ok.filter((s) => s.upload && s.jpgKB); if (ups.length) console.log(`
 for (const s of ups.filter((x) => x.jpgKB > 900)) console.log(`WARN ${s.upload} is ${s.jpgKB} KB, over the 900 KB get_snapshot can show; the board still takes it (3 MB), but nobody can look at it there`);
 const self = allStates.filter((s) => SELF.includes(s)), act = allStates.filter((s) => ACT.includes(s));
 if (self.length || act.length) console.log(`Not shot: ${[self.length ? `${self.join(', ')} (the default view itself)` : '', act.length ? `${act.join(', ')} (interaction states one element takes under a pointer, a key or a drag, not page states behind ?state=: gb-probe shows focus, look at the rest by hand)` : ''].filter(Boolean).join('; ')}`);
-// A marker state no element showed is shot as a page state but never fails for looking like the default view (whole page).
+// A marker state no element showed: shot as a page state, never failed as unchanged.
 const base = (lang) => ok.find((s) => s.file === `full-${lang}-390`)?.png;
 const same = ok.filter((s) => s.sheet && s.fullPng && base(s.lang)?.equals(s.fullPng)), wired = same.filter((s) => !s.item).map((s) => s.file);
 for (const s of same.filter((x) => x.item)) console.log(`WARN ${s.file}: a marker state no element of the default view shows (data-status="${s.params.state}"); its page shot looks like the default view`);
