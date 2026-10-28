@@ -1,14 +1,11 @@
 // The GoBanana gate for UI drafts. It acts only in a session where a GoBanana flow is active (the route hook fired on
 // a GoBanana ask, a get_playbook call finished or a GoBanana canvas was opened); elsewhere it stays silent.
 //   pre:  before Write of an HTML screen in a design session, GoBanana's playbooks must be loaded (blocked at most twice);
-//         before Artifact or SendUserFile publishes an HTML screen, gb-measure must have run on it since its last edit
-//         with no FAIL. A measure FAIL blocks twice; the third try passes with a warning line the user sees, so one
-//         false FAIL never traps the run. An unmeasured draft (gb-measure ran under another TMPDIR, against a URL, or not
-//         at all) also blocks twice, then passes with a warning line the user sees. gb-measure's stamps and its
+//         before Artifact or SendUserFile publishes an HTML screen, open gb-measure FAILs or a missing measure are a
+//         warning line the user sees, never a block (owner 2026-10-28: checks report, they never force a loop). gb-measure's stamps and its
 //         .gb-norender mark are read from $TMPDIR/gb, /tmp/gb and os.tmpdir()/gb.
 //   post: after Write, Edit or MultiEdit of an HTML file, static copy checks (the Arabic ones on an Arabic page only),
-//         plus the 14px floor on a UI draft (3 or more rules under 14px); FAIL lines go back to Claude to fix now, WARN
-//         lines go to Claude as context. No style rule (owner 2026-10-28: no font family cap, no budgets).
+//         plus the 14px floor on a UI draft (3 or more rules under 14px); all lines go to Claude as context, never a block. No style rule (owner 2026-10-28: no font family cap, no budgets).
 //   loaded: after a GoBanana new_canvas, open_canvas or get_canvas call, mark the session; after get_playbook, also
 //           copy the plugin's check scripts (tools/) into the gb temp folders, so the render loop never has to fetch
 //           code. The hooks never read the transcript (Anthropic Software Directory Policy 1.F: no querying chat history).
@@ -45,7 +42,7 @@ if (mode === "pre" && tool !== "Write") {
   for (const f of files) {
     const text = readFileSync(f, "utf8");
     if (!isUiDraft(f, text, session.design)) continue;
-    const mtimeMs = statSync(f).mtimeMs, st = checked[f], fresh = st && st.mtimeMs === mtimeMs, key = `publish:${f}:${mtimeMs}`;
+    const mtimeMs = statSync(f).mtimeMs, st = checked[f], fresh = st && st.mtimeMs === mtimeMs;
     if (fresh && st.fails === 0) continue;
     // Round 3 (F24): a rough screen goes out with its FAILs named in measure.openFails, never fixed first. Only a file
     // under design/gobanana/roughs/ is a rough (review round 3: a rough stamp elsewhere is a normal FAIL); its open
@@ -55,18 +52,13 @@ if (mode === "pre" && tool !== "Write") {
       if (st.fails > 0) warnings.push(`GoBanana gate: ${f} is a rough screen with ${st.fails} open FAIL(s)${ids.length ? ` (${ids.join(", ")})` : ""}, not a checked draft.`);
       continue;
     }
+    // Owner 2026-10-28 (speed: "with every rule it becomes super slow"): checks report, they never block a publish.
     if (fresh) {
-      // A measured FAIL blocks twice: the draft is fixed and measured again. The third try passes with a warning the
-      // user sees, so a false FAIL (a misread page) never traps the run.
-      const ids = failIds(st.summary), named = ids.length ? ` (${ids.join(", ")})` : "", n = strikes(`fail:${f}:${mtimeMs}`);
-      if (n > 2) { warnings.push(`GoBanana gate: ${f} was published with ${st.fails} failing gb-measure check(s)${named} after two blocks. It is not a checked draft.`); continue; }
-      deny(`GoBanana gate: gb-measure found ${st.fails} failing check(s)${named} on ${f} in its last run${st.summary ? ` (${st.summary})` : ""}. A draft with a FAIL is never shown or placed (a rough screen only with its FAILs named in measure.openFails). Fix every FAIL (the accessibility floor: contrast, body 16px, nothing read under 14px, 44px tap targets, no sideways scroll, alt text, visible focus; and the copy), run the render loop's one command again (playbook gobanana-draft/render-loop), then publish.${n === 2 ? " If a FAIL is a false reading (the page is right and the measure misread it), tell the user which FAIL id and why; a third publish goes through with a warning the user sees." : ""}`);
+      const ids = failIds(st.summary), named = ids.length ? ` (${ids.join(", ")})` : "";
+      warnings.push(`GoBanana gate: ${f} has ${st.fails} open gb-measure FAIL(s)${named}; it is shown with them open.`);
+      continue;
     }
-    // Unmeasured: blocks twice, then passes with a warning the user sees. gb-measure may have run under another TMPDIR
-    // (a sandboxed Bash) or against a URL, so its stamp is out of reach; the run is never trapped.
-    const n = strikes(key), noRender = cannotRender();
-    if (n > 2) { warnings.push(`GoBanana gate: ${f} was published unmeasured after two blocks: not a checked draft.${noRender ? " This machine is marked as unable to render." : ""}`); continue; }
-    deny(`GoBanana gate: ${f} has not been rendered and measured since its last edit, and an unchecked draft is never shown. Run the render loop's one command (gb-shoot and gb-measure, playbook gobanana-draft/render-loop; for several concepts also gb-spread, playbook gobanana-draft/concept-sheet), fix every FAIL, then publish.${noRender ? ' This machine is marked as unable to render: say so, and mark every visual item "not checked".' : ""}${n === 2 ? ' If gb-measure did run clean (under another TMPDIR or against a URL) or cannot run here, tell the user so; a third publish goes through with a warning the user sees, and every visual item not measured is "not checked".' : ""}`);
+    warnings.push(`GoBanana gate: ${f} was not measured since its last edit: not a checked draft.${cannotRender() ? " This machine is marked as unable to render." : ""}`);
   }
   if (warnings.length) process.stdout.write(JSON.stringify({ systemMessage: warnings.join("\n") }));
 }
@@ -75,9 +67,7 @@ if (mode === "post" && isHtml(ti.file_path)) {
   const f = abs(ti.file_path);
   if (existsSync(f)) {
     const text = readFileSync(f, "utf8"), ui = isUiDraft(f, text, session.design), lines = [...copyFindings(text, ui), ...(ui ? layoutFindings(text) : [])];
-    const fails = lines.filter((l) => l.startsWith("FAIL")), warns = lines.filter((l) => !l.startsWith("FAIL"));
-    if (fails.length) process.stdout.write(JSON.stringify({ decision: "block", reason: `GoBanana check on ${f}:\n${lines.join("\n")}\nFix the FAIL lines in the file now (playbook gobanana-draft/content-and-arabic has the words to use; the floor is in gobanana-draft/core).` }));
-    else if (warns.length) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `GoBanana check on ${f}:\n${warns.join("\n")}` } }));
+    if (lines.length) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `GoBanana check on ${f} (reported, never blocking):\n${lines.join("\n")}` } }));
   }
 }
 process.exit(0);

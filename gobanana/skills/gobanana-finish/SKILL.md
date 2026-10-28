@@ -5,16 +5,16 @@ description: Finished mode of GoBanana. Research, spec and build a page, feature
 
 # GoBanana finish
 
-Plugin 0.7.1. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.7.1, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.7.2. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.7.2, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
 1. Show each reference's source link, every time.
-2. Never download, save or re-host reference images.
+2. Never upload or re-host reference images; download one only to copy it locally in a draft's step 1.
 3. Never delete a canvas without the user's explicit yes.
 4. Relay quota and plan messages once, as they are. Never retry in a loop.
 5. Run the intake stop (read `design/gobanana/CONTEXT.md`, ask only what is missing) before `bend_brief`.
-6. Every state reachable, worst case data, one language (English unless asked), WCAG 2.2 AA; never show an unchecked draft.
+6. Every state reachable, one language (English unless asked), WCAG 2.2 AA; measure once before showing.
 7. Directions are strategies that keep every must-keep, each with its own hero; taste only as given or confirmed. End with the canvas web link.
 
-Call get_playbook with name `gobanana-finish` and plugin `0.7.1`, and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-finish` and plugin `0.7.2`, and follow it exactly; batch the playbooks it names in `more`.

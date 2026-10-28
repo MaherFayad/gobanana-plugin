@@ -1,4 +1,4 @@
-// gb-tools v3: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v4: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-frames: a video or GIF reference as one sheet of time-labelled frames, made here.
 //   node gb-frames.mjs <post or page url | video file> [--frames 12] [--max 20] [--out <dir>] [--name <file>]
 // X, Dribbble, Pinterest, og:video or <video> pages; YouTube, Vimeo, Instagram, TikTok via yt-dlp. Temp video, deleted.

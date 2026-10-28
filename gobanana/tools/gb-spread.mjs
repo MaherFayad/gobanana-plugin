@@ -1,4 +1,4 @@
-// gb-tools v3: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v4: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-spread: are these concepts really different? Where text, panels and media sit on each first screen.
 //   node gb-spread.mjs <a.html|url> <b.html|url> [more] [--lang en] [--w 1440 --h 900] [--max 0.7] [--json]
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process';

@@ -1,4 +1,4 @@
-// gb-tools v3: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v4: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-compare: do a board's drafts look alike? Each at 1440x900 (default view, &shot=1) in its one language.
 //   node gb-compare.mjs <a.html|url> <b.html|url> [more] [--tokens a.json[,b.json...]] [--languages en] [--same-direction] [--out dir] [--json]
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';

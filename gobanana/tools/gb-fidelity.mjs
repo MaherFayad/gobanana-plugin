@@ -1,7 +1,12 @@
-// gb-tools v3: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v4: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-fidelity: how far is a draft's first screen from its hero? Pixels and the DOM only, no AI. The hero and refs are read in memory, never saved alone.
 //   node gb-fidelity.mjs <draft.html|url> --hero <image url|file> [--refs "part=url,part=sel:<css>|url"] [--viewport 390x844] [--tokens tokens.json] [--hero-type 56/16] [--hero-crop x,y,w,h|none] [--out dir] [--json]
 //   node gb-fidelity.mjs --draft-image <screenshot> --hero <image url|file> [--viewport 390x844] [--hero-type 56/16] [--out dir]   a screenshot instead of a page (no section pairs)
+//   node gb-fidelity.mjs <draft.html|url> --hero <image url|file> --diff [--hero-crop x,y,w,h|none] [--out dir]   the 1:1 copy check: one render at the hero's exact pixel size
+// --diff: the viewport is the hero's own size (after any mockup crop; a phone hero over 430px wide renders at 2x or 3x, so the
+// shot has the hero's pixels). Writes <out>/diff.jpg (hero, draft, difference: the absolute per-pixel difference x4 over a 50%
+// overlay of both; local only, never uploaded) and <out>/diff.json, and prints one number: the pixel match %, the share of
+// pixels within DIFF_TOL per channel.
 // Viewport: --viewport, else phone (390x844) or desktop (1440x900) by the hero's shape, the tokens.viewports size of that kind when given.
 // A hero taller than the viewport (a full page capture) is cut to its first screen.
 // A hero shot as a phone mockup (a device on a plain backdrop) is cropped to its screen; --hero-crop sets the box, --hero-crop none keeps it whole.
@@ -133,6 +138,18 @@ export function paletteDE(p, q) {
   let cost = 0; for (const [d, i, j] of pairs.sort((x, y) => x[0] - y[0])) { const m = Math.min(a[i], b[j]); if (m > 0) { cost += m * d; a[i] -= m; b[j] -= m; } }
   return cost * 100;
 }
+// --diff: two images of one size. match: % of pixels whose channels all sit within tol; panel: the absolute per-pixel
+// difference x4 over a 50% overlay of both, dimmed to half, so what moved shows bright on a faint copy of both.
+export const DIFF_TOL = 16;
+export function pixelDiff(a, b, tol = DIFF_TOL) {
+  const n = a.w * a.h, d = new Uint8ClampedArray(n * 4); let ok = 0;
+  for (let i = 0; i < n * 4; i += 4) {
+    let worst = 0;
+    for (let c = 0; c < 3; c++) { const v = Math.abs(a.d[i + c] - b.d[i + c]); if (v > worst) worst = v; d[i + c] = (a.d[i + c] + b.d[i + c]) / 4 + v * 4; }
+    d[i + 3] = 255; if (worst <= tol) ok++;
+  }
+  return { match: Math.round((ok / (n || 1)) * 1000) / 10, panel: { w: a.w, h: a.h, d } };
+}
 // Imagery is far when one side has photos (12% of the screen or more) and the other has under half as much.
 export const imageryFar = (d, h) => Math.max(d, h) >= 0.12 && Math.min(d, h) < Math.max(d, h) * FAR.imagery;
 const ratioFar = (v, lim) => v != null && (v > lim || v < 1 / lim);
@@ -219,6 +236,18 @@ async function SHEET({ rows, foot }) {
   x.font = '500 16px ui-monospace,monospace'; for (const l of foot) { x.fillText(l, pad, y + 16); y += 24; }
   return c.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
+// In a blank page: the --diff sheet, three RGBA panels side by side with a label each and a foot line.
+async function DIFFSHEET({ panels, labels, foot }) {
+  const pad = 24, gap = 24, lab = 30, W = panels.reduce((s, p) => s + p.w, 0) + gap * (panels.length - 1) + pad * 2, H = Math.max(...panels.map((p) => p.h)) + lab + pad * 2 + 24;
+  const c = Object.assign(document.createElement('canvas'), { width: W, height: H }), x = c.getContext('2d'); x.fillStyle = '#d9dadc'; x.fillRect(0, 0, W, H); x.fillStyle = '#1b1b1b'; x.font = '600 18px system-ui,sans-serif';
+  let left = pad;
+  for (let i = 0; i < panels.length; i++) {
+    const p = panels[i], raw = atob(p.b64), d = new Uint8ClampedArray(raw.length); for (let k = 0; k < raw.length; k++) d[k] = raw.charCodeAt(k);
+    x.fillText(labels[i], left, pad + 20); x.putImageData(new ImageData(d, p.w, p.h), left, pad + lab); left += p.w + gap;
+  }
+  x.font = '500 16px ui-monospace,monospace'; x.fillText(foot, pad, H - pad + 4);
+  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
 
 const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', svg: 'image/svg+xml' };
 // An image as a data URL, in memory: http(s) fetched (20 MB at most), file: or a path read.
@@ -252,7 +281,7 @@ const sizeOf = (s) => { const m = /^(\d{3,4})x(\d{3,4})$/.exec(String(s).trim())
 
 async function main() {
   const args = process.argv.slice(2), opt = (n) => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; }, flag = (n) => { const i = args.indexOf('--' + n); return i < 0 ? false : (args.splice(i, 1), true); };
-  const hero = opt('hero'), heroTypeArg = opt('hero-type'), refsArg = opt('refs'), vpArg = opt('viewport'), tp = opt('tokens'), cropArg = opt('hero-crop'), draftImage = opt('draft-image'), asJson = flag('json');
+  const hero = opt('hero'), heroTypeArg = opt('hero-type'), refsArg = opt('refs'), vpArg = opt('viewport'), tp = opt('tokens'), cropArg = opt('hero-crop'), draftImage = opt('draft-image'), asJson = flag('json'), diff = flag('diff');
   const out = resolve(opt('out') || join(process.env.TMPDIR || '/tmp', 'gb', 'fidelity')), target = args[0];
   const usage = (why) => { if (why) console.error(why); console.error('usage: node gb-fidelity.mjs <draft.html|url> --hero <image url|file> [--refs "part=url,part=sel:<css>|url"] [--viewport 390x844] [--tokens tokens.json] [--hero-type 56/16] [--hero-crop x,y,w,h|none] [--out dir] [--json]\n   or: node gb-fidelity.mjs --draft-image <screenshot> --hero <image url|file> [--viewport 390x844] [--hero-type 56/16] [--out dir]'); process.exit(2); };
   if (!hero || (!target && !draftImage) || [hero, heroTypeArg, refsArg, vpArg, tp, cropArg, draftImage].some((v) => v === undefined || /^--/.test(v ?? ''))) usage();
@@ -264,8 +293,8 @@ async function main() {
   const browser = await pw.chromium.launch().catch(cannot), blank = await browser.newPage();
   const decode = async (src, max = 1600) => { const r = await blank.evaluate(DECODE, { src, max }); return { w: r.w, h: r.h, d: new Uint8ClampedArray(Buffer.from(r.b64, 'base64')), nw: r.nw, nh: r.nh }; };
   let heroSrc; try { heroSrc = await imageData(hero); } catch (e) { await browser.close(); console.log(`FAIL hero-unreadable: ${String(e.message || e).split('\n')[0]}`); process.exit(0); }
-  // The hero, cropped to the screen when it is a phone mockup.
-  let heroImg = await decode(heroSrc), heroCrop = null, cropWhy = 'whole image';
+  // The hero, cropped to the screen when it is a phone mockup (--diff reads it at full size: its pixels are the target).
+  let heroImg = await decode(heroSrc, diff ? 16000 : 1600), heroCrop = null, cropWhy = 'whole image';
   if (cropArg && cropArg !== 'none') { const n = cropArg.split(',').map(Number); if (n.length !== 4 || n.some((v) => !(v >= 0))) usage('--hero-crop takes x,y,w,h in the image px (or fractions of it), or none'); const k = n.every((v) => v <= 1) ? [heroImg.w, heroImg.h] : [heroImg.w / heroImg.nw, heroImg.h / heroImg.nh]; heroCrop = { x: n[0] * k[0], y: n[1] * k[1], w: n[2] * k[0], h: n[3] * k[1] }; cropWhy = '--hero-crop'; }
   else if (cropArg !== 'none') { const s = findScreen(heroImg.w > 700 ? resize(heroImg, 700, Math.round(heroImg.h * 700 / heroImg.w)) : heroImg); if (s) { const k = heroImg.w > 700 ? heroImg.w / 700 : 1; heroCrop = { x: s.x * k, y: s.y * k, w: s.w * k, h: s.h * k }; cropWhy = 'device screen found (pass --hero-crop none to keep the whole image)'; } }
   const heroNat = heroImg.nw / heroImg.w;
@@ -273,6 +302,30 @@ async function main() {
   // The viewport: --viewport; else phone or desktop by the hero's shape (a phone screen is under 0.6 wide for its height; a full
   // page capture 1000px wide or more is a desktop page unless it is shaped like a phone screen), then the tokens' size of that kind.
   const ar = heroImg.w / heroImg.h, natW = heroImg.w * heroNat, phone = cropWhy.startsWith('device') || (ar < 0.6 && !(natW >= 1000 && (ar < 0.42 || ar > 0.5)));
+  if (diff) {
+    // One render at the hero's own size: a phone screen over 430px wide is a 2x or 3x capture, so the page renders at that scale.
+    const W = heroImg.w, H = heroImg.h, dpr = phone ? Math.max(1, Math.round(W / 430)) : W > 2000 ? 2 : 1, vw = Math.round(W / dpr), vh = Math.round(H / dpr);
+    let shotSrc;
+    if (draftImage) shotSrc = await imageData(draftImage);
+    else {
+      const dp = await browser.newPage({ viewport: { width: vw, height: vh }, deviceScaleFactor: dpr }), [fp, q] = target.split('?'), u = new URL(/^https?:|^file:/.test(target) ? target : pathToFileURL(resolve(fp)).href + (q ? '?' + q : '')); u.searchParams.set('shot', '1');
+      try { await dp.goto(u.href, { waitUntil: 'load', timeout: 30000 }); await dp.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {}); } catch (e) { await browser.close(); console.log(`FAIL draft-unreadable: ${String(e.message || e).split('\n')[0]}`); process.exit(0); }
+      await dp.evaluate(() => document.fonts?.ready).catch(() => {}); await dp.waitForTimeout(300);
+      shotSrc = 'data:image/png;base64,' + (await dp.screenshot({ type: 'png' })).toString('base64');
+    }
+    // A draft of another size is cut to the hero's shape from the top, then scaled to its pixels.
+    let dImg = await decode(shotSrc, 16000); const ch = Math.min(dImg.h, Math.round(dImg.w * H / W)); if (ch !== dImg.h) dImg = crop(dImg, 0, 0, dImg.w, ch); if (dImg.w !== W || dImg.h !== H) dImg = resize(dImg, W, H);
+    const { match, panel } = pixelDiff(heroImg, dImg), k = Math.min(1, 2400 / H, 800 / W), small = (im) => (k < 1 ? resize(im, Math.max(1, Math.round(W * k)), Math.max(1, Math.round(H * k))) : im);
+    const b64 = (im) => Buffer.from(im.d.buffer, im.d.byteOffset, im.d.byteLength).toString('base64'), panels = [heroImg, dImg, panel].map(small).map((im) => ({ w: im.w, h: im.h, b64: b64(im) }));
+    const foot = `pixel match ${match}% (within ${DIFF_TOL} per channel), ${W}x${H} px, ${cropWhy}`;
+    mkdirSync(out, { recursive: true }); const file = join(out, 'diff.jpg');
+    writeFileSync(file, Buffer.from(await blank.evaluate(DIFFSHEET, { panels, labels: ['hero', `draft ${vw}x${vh}${dpr > 1 ? ` at ${dpr}x` : ''}`, 'difference x4 over both at 50%'], foot }), 'base64'));
+    await browser.close();
+    writeFileSync(join(out, 'diff.json'), JSON.stringify({ v: 1, tool: 'gb-fidelity', mode: 'diff', hero, size: [W, H], viewport: `${vw}x${vh}`, dpr, tolerance: DIFF_TOL, pixelMatch: match, crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([q, v]) => [q, Math.round(v)])) : null, ms: Date.now() - t0 }, null, 1));
+    console.log(`Pixel match: ${match}%`);
+    console.log(`The draft at the hero's ${W}x${H} px (${vw}x${vh}${dpr > 1 ? ` at ${dpr}x` : ''}, ${cropWhy}); a pixel matches when every channel is within ${DIFF_TOL}. Look at ${file}: hero, draft, and the difference (bright where they differ). Local only: it holds the hero, never upload it.`);
+    return;
+  }
   const tvs = (Array.isArray(tokens?.viewports) ? tokens.viewports : [tokens?.viewports]).flatMap((x) => String(x || '').split(',')).map(sizeOf).filter(Boolean).sort((a, b) => a[0] - b[0]);
   const vp = vpArg ? sizeOf(vpArg) : tvs.length ? (phone ? tvs[0] : tvs[tvs.length - 1]) : phone ? [390, 844] : [1440, 900];
   // A hero much taller than the viewport (a full page capture) is cut to its first screen.
