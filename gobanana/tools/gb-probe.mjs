@@ -1,4 +1,4 @@
-// gb-tools v4: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v5: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // node gb-probe.mjs <url> <outdir>   (the .gb-switch dev chrome is skipped, as gb-measure does)
 // Tabs through the page at 390 and records each stop: ring (focus shows on it, its label, a box around it or a part of it), covered.
 // page.under44: controls under 44x44px at 390 (tap targets), links inside a sentence aside.

@@ -1,4 +1,4 @@
-// gb-tools v4: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v5: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-measure: render a draft in its one language at the brief's viewports (390x844 and 1440x900 when none is given), check the accessibility floor and content honesty, print FAIL and WARN.
 //   node gb-measure.mjs <file.html|url> [--en <url>] [--tokens tokens.json] [--languages en] [--out <dir>] [--viewport 390x844]
 //     [--states loading,error] [--taste-allows mechanic-missing] [--landing] [--json]
@@ -561,5 +561,5 @@ else {
 const at = `${mainW}`;
 if (measure) console.log(`${fails} failing check(s), body ${measure.bodyPx}px, ${measure.textElements} text elements read at ${at}. Summary: ${jsonPath}`);
 else console.log(`${fails} failing check(s). No measure for add_to_canvas: ${![target, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u))) ? `no ${at} run found body text` : 'this run was a ?state or ?data view'}; measure the rendered default view (no ?state or ?data) for it. Summary: ${jsonPath}`);
-console.log(fails ? `Fix before placing a full draft, then measure again; a rough may be placed with ${fails === 1 ? 'this FAIL' : 'these FAILs'} in measure.openFails.` : 'Numbers are evidence for the craft check; they never replace looking side by side.');
+console.log(fails ? 'Open FAILs go in measure.openFails; nothing here blocks placing.' : 'Numbers are evidence for the craft check; they never replace looking side by side.');
 process.exit(fails ? 1 : 0);

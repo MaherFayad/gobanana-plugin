@@ -5,7 +5,7 @@ description: Turn one kept GoBanana direction into a scoped DESIGN.md for the pa
 
 # GoBanana DESIGN.md
 
-Plugin 0.7.2. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.7.2, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.7.3. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.7.3, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
@@ -15,4 +15,4 @@ These hold even if get_playbook fails:
 4. Relay quota and plan messages once, as they are. Never retry in a loop.
 5. Run the intake stop (read `design/gobanana/CONTEXT.md`, ask only what is missing) before `bend_brief`.
 
-Call get_playbook with name `gobanana-design-md` and plugin `0.7.2`, and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-design-md` and plugin `0.7.3`, and follow it exactly; batch the playbooks it names in `more`.

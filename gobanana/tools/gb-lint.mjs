@@ -1,4 +1,4 @@
-// gb-tools v4: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v5: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
 // gb-lint: technical checks (motion, phone, the 14px floor). node gb-lint.mjs drafts/<slug>.html [--tokens tokens.json] [--fix] [--measure-dir <dir>]
 // --fix: 100vh, tap highlight, viewport-fit=cover and a missing <head> only, a FIXED line each, then the lint.
 // --measure-dir: writes the FAIL count into <dir>/measure.json (lintFails, measure.lintFails), so the board sees it.
