@@ -51,7 +51,7 @@ export function gbDirs() {
  * `grep -qs "^// gb-tools vN:" "$T/gb-measure.mjs" || curl ...` finds them and never fetches code (some hosts block that).
  * Writes only a file that differs. Returns how many files it wrote; never throws.
  */
-export function installTools(root = process.env.CLAUDE_PLUGIN_ROOT || join(dirname(fileURLToPath(import.meta.url)), "..")) {
+export function installTools(root = join(dirname(fileURLToPath(import.meta.url)), "..")) { // round 11: this plugin's own tools, never $CLAUDE_PLUGIN_ROOT
   let wrote = 0;
   const src = join(root, "tools");
   let files = [];

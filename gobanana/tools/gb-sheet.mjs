@@ -1,7 +1,7 @@
-// gb-tools v5: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v8: bump it in every script and the fetch line on any change.
 // gb-sheet: sketches (or one view) as one labelled contact sheet for a crit.
 //   node gb-sheet.mjs <a.html[?query]> [b.html ...] [--size 1440x900] [--scale 1] [--out <dir>] [--name sheet] [--jpeg]
-// One PNG per file, a sheet for 2 or more; --name names it, --jpeg adds 1x JPEGs; a page that fails exits 1 after the rest.
+import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -20,7 +20,7 @@ const req = createRequire(import.meta.url);
 let pw; try { try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); } } catch (e) { cannot(e); }
 mkdirSync(out, { recursive: true });
 const href = (f) => { const [p, q] = f.split('?'); const u = new URL(/^https?:|^file:/.test(p) ? f : pathToFileURL(resolve(p)).href + (q ? '?' + q : '')); u.searchParams.set('shot', '1'); return u; };
-// A repeated base name takes its folder's name, then the index.
+// A repeated base name takes its folder's name, then the index
 const clean = (s) => s.replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '') || 'page';
 const parts = files.map((f) => { const [p, q] = f.split('?'), path = /^https?:/.test(p) ? new URL(p).pathname : /^file:/.test(p) ? fileURLToPath(p) : resolve(p); return { base: clean(basename(path, '.html')), dir: clean(basename(dirname(path))), q: q ? '-' + clean(q) : '' }; });
 const count = (l) => l.reduce((m, x) => m.set(x, (m.get(x) || 0) + 1), new Map());
@@ -28,7 +28,7 @@ let labels = parts.map((x) => x.base + x.q); const seen = count(labels);
 labels = labels.map((l, i) => (seen.get(l) > 1 ? `${parts[i].dir}-${l}` : l)); const again = count(labels);
 labels = labels.map((l, i) => (again.get(l) > 1 ? `${l}-${i + 1}` : l));
 if (files.length === 1 && nameOpt) labels = [clean(nameOpt)];
-const browser = await pw.chromium.launch().catch(cannot), shots = [], failed = [];
+const browser = guard(await pw.chromium.launch().catch(cannot)), shots = [], failed = [];
 try { rmSync(noRender, { force: true }); } catch {}
 for (const [i, f] of files.entries()) {
   const u = href(f), label = labels[i];
@@ -43,7 +43,7 @@ for (const [i, f] of files.entries()) {
   shots.push({ label, file }); console.log(`${file}${errs.length ? '  page errors: ' + errs.join(' | ') : ''}`);
 }
 if (jpeg && shots.length) {
-  // Each shot at 1x, JPEG 0.9 (upload cap 3 MB).
+  // Each shot at 1x, JPEG 0.9
   const page = await browser.newPage({ viewport: { width: 400, height: 300 } });
   for (const s of shots) {
     const url = await page.evaluate(async ({ src, w, h }) => { const img = new Image(); img.src = src; await img.decode(); const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, w, h); return c.toDataURL('image/jpeg', 0.9); }, { src: `data:image/png;base64,${readFileSync(s.file).toString('base64')}`, w, h });

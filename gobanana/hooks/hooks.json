@@ -1,5 +1,5 @@
 {
-  "description": "GoBanana guardrails: route GoBanana asks (the name or \"go wild\") to the GoBanana skills, and, in a GoBanana session only, check UI drafts as they are written and hold an unchecked draft back from being published.",
+  "description": "GoBanana guardrails: route GoBanana asks (the name or \"go wild\") to the GoBanana skills; in a GoBanana session only, check UI drafts as they are written and hold an unchecked draft back from being published; and let the plugin's own pinned check scripts (tools/gb-*.mjs) run without a prompt.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -13,6 +13,16 @@
       }
     ],
     "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/gb-allow.mjs\"",
+            "timeout": 10
+          }
+        ]
+      },
       {
         "matcher": "Write|Artifact|SendUserFile",
         "hooks": [

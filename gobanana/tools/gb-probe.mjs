@@ -1,12 +1,11 @@
-// gb-tools v5: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
-// node gb-probe.mjs <url> <outdir>   (the .gb-switch dev chrome is skipped, as gb-measure does)
-// Tabs through the page at 390 and records each stop: ring (focus shows on it, its label, a box around it or a part of it), covered.
-// page.under44: controls under 44x44px at 390 (tap targets), links inside a sentence aside.
+// gb-tools v8: bump it in every script and the fetch line on any change.
+// node gb-probe.mjs <url> <outdir>: each keyboard stop at 390 (ring, label, covered) and page.under44 (tap targets)
+import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { join } from 'node:path';
 const req = createRequire(import.meta.url); let pw; try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); }
 const { chromium } = pw;
 const [url, out = '.'] = process.argv.slice(2); const tag = new URL(url).searchParams.get('lang') || 'page';
-const b = await chromium.launch(), r = {};
+const b = guard(await chromium.launch()), r = {};
 let p = await b.newPage({ viewport: { width: 320, height: 568 } });
 await p.goto(url); await p.waitForTimeout(800);
 r.reflow320 = await p.evaluate(() => {
@@ -28,7 +27,7 @@ r.page = await p.evaluate(() => {
     headingSkips: lv.filter((l, i) => i && l > lv[i - 1] + 1).length,
     unlabelled: q('input:not([type=hidden]),select,textarea').filter(e => !named(e)).map(e => e.name || e.type),
     noAutocomplete: q('input[type=email],input[type=tel],input[type=password],input[name*=name i],input[name*=phone i],input[name*=card i]').filter(e => !e.getAttribute('autocomplete')).map(e => e.name || e.type),
-    // Tap targets on the phone are 44px (the floor at 390), not WCAG's 24px desktop minimum.
+    // Tap targets on the phone are 44px
     under44: q('a,button,input,select,textarea,[role=button],[tabindex="0"]').filter(e => { const x = e.getBoundingClientRect(); return x.width && (x.width < 44 || x.height < 44) && !e.closest('p'); }).map(e => e.tagName.toLowerCase() + ' ' + (e.textContent || e.name || '').trim().slice(0, 20)),
     liveRegions: q('[aria-live],[role=status],[role=alert]').length,
     unnamedDialogs: q('dialog,[role=dialog],[role=alertdialog]').filter(d => !d.getAttribute('aria-labelledby') && !d.getAttribute('aria-label')).length };
@@ -40,7 +39,7 @@ for (let i = 0; i < 80; i++) {
     const e = document.activeElement; if (!e || e === document.body || e.dataset.gbSeen) return null; e.dataset.gbSeen = 1;
     if (e.closest('.gb-switch')) return { skip: true };
     const x = e.getBoundingClientRect(), s = getComputedStyle(e);
-    // :focus rules that paint the stop, a box around it or a part of it.
+    // :focus rules that paint the stop
     const PAINT = /outline|box-shadow|border|background|stroke|fill|opacity|transform|filter|text-decoration|color|visibility|display/;
     const parts = (sel) => { const out = []; let d = 0, cur = ''; for (const ch of sel) { if (ch === '(') d++; if (ch === ')') d--; if (ch === ',' && !d) { out.push(cur); cur = ''; } else cur += ch; } return [...out, cur].map((p) => p.trim()).filter((p) => /:focus/.test(p)); };
     const rules = (list) => { const o = []; for (const r of list) { if (r.cssRules && (!r.media || matchMedia(r.media.mediaText).matches) && !(r instanceof CSSStyleRule)) o.push(...rules(r.cssRules)); if (r instanceof CSSStyleRule && /:focus/.test(r.selectorText)) o.push(r); } return o; };

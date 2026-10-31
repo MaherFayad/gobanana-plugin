@@ -9,9 +9,10 @@
 //   loaded: after a GoBanana new_canvas, open_canvas or get_canvas call, mark the session; after get_playbook, also
 //           copy the plugin's check scripts (tools/) into the gb temp folders, so the render loop never has to fetch
 //           code. The hooks never read the transcript (Anthropic Software Directory Policy 1.F: no querying chat history).
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
-import { cannotRender, copyFindings, failIds, flowActive, installTools, isHtml, isUiDraft, layoutFindings, playbookLoaded, readChecked, readSession, readStdin, writeSession } from "./gb-rules.mjs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { cannotRender, copyFindings, failIds, flowActive, gbDirs, installTools, isHtml, isUiDraft, layoutFindings, playbookLoaded, readChecked, readSession, readStdin, writeSession } from "./gb-rules.mjs";
 
 const mode = process.argv[2], input = await readStdin(), ti = input.tool_input || {}, tool = String(input.tool_name || "");
 const session = readSession(input.session_id), abs = (p) => resolve(input.cwd || process.cwd(), String(p));
@@ -23,7 +24,15 @@ const strike = (key) => strikes(key) <= 2;
 const isRoughPath = (f) => /(^|[\\/])design[\\/]gobanana[\\/]roughs[\\/]/.test(f);
 
 if (mode === "loaded") {
-  if (/get_playbook$/.test(tool)) { writeSession(input.session_id, { ...session, playbook: true }); installTools(); }
+  if (/get_playbook$/.test(tool)) {
+    writeSession(input.session_id, { ...session, playbook: true }); installTools();
+    // Round 11 (F1): name where the pinned copies are, so a draft runs them from there (gb-allow.mjs lets them run).
+    if (!session.toolsNamed) {
+      writeSession(input.session_id, { ...readSession(input.session_id), toolsNamed: true });
+      const tools = (() => { const t = resolve(dirname(fileURLToPath(import.meta.url)), "..", "tools") /* this hook's own plugin, never $CLAUDE_PLUGIN_ROOT */; try { return realpathSync(t); } catch { return t; } })();
+      process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `GoBanana plugin: run the check scripts from the plugin's own folder by its literal path, one script per command, for example \`node ${tools}/gb-shoot.mjs /abs/page.html --out /abs/out\`: written that way (no variables such as $T, nothing chained but an optional 2>&1 and | tail -N, paths inside the project or the temp folder) the plugin runs them without a prompt.` } }));
+    }
+  }
   else writeSession(input.session_id, { ...session, canvas: true });
 }
 // Owner 2026-10-26: the gate acts only in a session where a GoBanana flow is active (it blocked an unrelated publish).

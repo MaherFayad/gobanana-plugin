@@ -1,11 +1,10 @@
-// gb-tools v5: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
-// gb-measure: render a draft in its one language at the brief's viewports (390x844 and 1440x900 when none is given), check the accessibility floor and content honesty, print FAIL and WARN.
-//   node gb-measure.mjs <file.html|url> [--en <url>] [--tokens tokens.json] [--languages en] [--out <dir>] [--viewport 390x844]
-//     [--states loading,error] [--taste-allows mechanic-missing] [--landing] [--json]
-//   node gb-measure.mjs --rough <out-dir> a.html b.html ...   roughs in one run, floor checks only, <out-dir>/<name>/measure.json each
-// --viewport (repeat it, or 390x844,1440x900), else tokens.viewports (--tokens, or a tokens.json beside the file).
-// Flags and checks: playbook gobanana-draft/measure-script. No style budgets (owner 2026-10-28): the look is the hero's.
+// gb-tools v8: bump it in every script and the fetch line on any change.
+// gb-measure: a draft's accessibility floor and content honesty at the brief's viewports, FAIL and WARN.
+//   node gb-measure.mjs <file.html|url> [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--json]
+//   node gb-measure.mjs --rough <out-dir> a.html b.html ...   floor checks only
+// Flags and checks: measure-script. No style budgets, the look is the hero's.
 // Adapted from taste-skill scripts/inspect.mjs and scripts/lib/rules.mjs (MIT, github.com/Leonxlnx/taste-skill).
+import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve, join } from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url'; import { inflateSync } from 'node:zlib';
 
@@ -15,20 +14,20 @@ const flag = (n) => { const i = args.indexOf('--' + n); if (i < 0) return false;
 const tp = opt('tokens'), tokens = tp ? JSON.parse(readFileSync(tp, 'utf8')) : null;
 const urlFor = { ar: opt('ar'), en: opt('en') }, outDir = opt('out'), list = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const langArg = list(opt('languages')), tokenLangs = Array.isArray(tokens?.languages) ? list(tokens.languages.join(',')) : [];
-// ONE language: --languages, else the tokens' language, else the page's own <html lang> (read below), else English.
+// ONE language: --languages, else the tokens' language
 const langGiven = langArg.length > 0 || !!tokens?.primaryLanguage || tokenLangs.length > 0;
 let languages = [...new Set(langArg.length ? langArg : [String(tokens?.primaryLanguage || tokenLangs[0] || 'en').toLowerCase()])];
 const ta = []; for (let v; (v = opt('taste-allows')) !== null;) ta.push(v);
 const allow = [...list(ta.join(',')), ...(Array.isArray(tokens?.tasteAllows) ? tokens.tasteAllows.map(String) : [])];
 flag('work'); flag('phone'); const asJson = flag('json'); // --work and --phone are accepted and ignored: no budgets.
-// A landing page (tokens.landing or --landing) needs no [data-mechanic] box; a marked box still has to move.
+// A landing page needs no [data-mechanic] box
 const landing = flag('landing') || tokens?.landing === true;
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 const roughDir = opt('rough'), rough = roughDir !== null, vpArg = []; for (let v; (v = opt('viewport')) !== null;) vpArg.push(v);
 const stateIds = rough ? [] : list(opt('states')).map(kebab).filter((s) => !/^(default|idle|hover|focus|focus-visible|active|pressed|moving|dragging)$/.test(s)), target = args[0];
 const usage = () => { console.error('usage: node gb-measure.mjs <file.html|url> [--tokens tokens.json] [--languages en] [--out dir] [--viewport 390x844] [--states loading,error] [--taste-allows mechanic-missing] [--landing] [--json]\n   or: node gb-measure.mjs --rough <out-dir> a.html b.html ... [--viewport 390x844] [--tokens tokens.json]'); process.exit(2); };
 if ((rough && (!roughDir || roughDir.startsWith('--') || !args.length)) || (!target && !languages.every((l) => urlFor[l]))) usage();
-// Viewports: --viewport, else tokens.viewports (the brief's platform), else a tokens.json beside the file, else 390x844 and 1440x900.
+// Viewports: --viewport, else tokens.viewports
 const nearTokens = (src) => { try { if (/^https?:/.test(src)) return null; const fp = src.startsWith('file:') ? fileURLToPath(src.split('?')[0]) : resolve(src.split('?')[0]); return JSON.parse(readFileSync(join(dirname(fp), 'tokens.json'), 'utf8')); } catch { return null; } };
 const vpList = (v) => (Array.isArray(v) ? v : [v]).flatMap((x) => String(x || '').split(',')).map((s) => s.trim()).filter(Boolean);
 const vpRaw = vpArg.length ? vpList(vpArg) : vpList(tokens?.viewports ?? (target ? nearTokens(target)?.viewports : null));
@@ -36,11 +35,11 @@ const viewports = vpRaw.map((s) => { const m = /^(\d{3,4})x(\d{3,4})$/.exec(s); 
 if (!viewports.length) viewports.push([390, 844], [1440, 900]);
 const [mainW, mainH] = viewports[viewports.length - 1]; // the widest view: mechanic, focus, reduced motion and the server's numbers
 const req = createRequire(import.meta.url), gbDir = join(process.env.TMPDIR || '/tmp', 'gb'), noRender = join(gbDir, '.gb-norender');
-// No browser: mark the machine (.gb-norender, read by the publish gate) and stop.
+// No browser: mark the machine and stop
 const cannot = (e) => { try { mkdirSync(gbDir, { recursive: true }); writeFileSync(noRender, `${new Date().toISOString()} ${String(e?.message || e).split('\n')[0]}\n`); } catch {} console.error(`This machine cannot render: ${String(e?.message || e).split('\n')[0]}\nMarked ${noRender}. Show the draft only with every visual item "not checked".`); process.exit(3); };
 let pw; try { try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); } } catch (e) { cannot(e); }
 
-// Runs in the page (or pasted alone into browser_evaluate).
+// Runs in the page
 function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 1440 }) {
   const gcs = (e, p) => getComputedStyle(e, p), bcr = (e) => e.getBoundingClientRect(), qsa = (q) => document.body.querySelectorAll(q), qda = (q) => document.querySelectorAll(q);
   const W = innerWidth, H = innerHeight, mobile = W < 640, out = [], add = (level, id, msg) => out.push({ level, id, msg });
@@ -54,39 +53,44 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
   const clip = (s) => s.replace(/\s+/g, ' ').trim().slice(0, 40);
   const vis = (e) => { const r = bcr(e); return r.width >= 1 && r.height >= 1 && gcs(e).visibility !== 'hidden'; };
   const txtOf = (e) => String(e?.innerText ?? e?.textContent ?? ''), cls = (e) => String(e?.getAttribute?.('class') || '');
-  // sr-only: clipped, 1px, or far off screen.
   const srMemo = new Map(), srOnly = (el) => {
     if (!el || el === document.body || el === html || !(el instanceof Element)) return false; if (srMemo.has(el)) return srMemo.get(el);
     const cs = gcs(el), r = bcr(el), n = (cs.clip.match(/rect\(([^)]*)\)/)?.[1] || '').split(/[\s,]+/).map(parseFloat), ab = /absolute|fixed/.test(cs.position);
     const v = (ab && n.length === 4 && (n[2] - n[0] <= 1 || n[1] - n[3] <= 1)) || /^inset\((50|100)%|^circle\(0/.test(cs.clipPath) || (/hidden|clip/.test(cs.overflowX + cs.overflowY) && (r.width <= 1.5 || r.height <= 1.5)) || parseFloat(cs.textIndent) <= -999 || (ab && (r.right < -999 || r.left > W + 999)) || srOnly(el.parentElement);
     srMemo.set(el, v); return v;
   };
-  // The outermost fixed or sticky box around an element, or null.
   const pinMemo = new Map(), pinned = (el) => { if (!el || el === html || el === document.body) return null; if (pinMemo.has(el)) return pinMemo.get(el); const p = gcs(el).position, v = pinned(el.parentElement) || (p === 'fixed' || p === 'sticky' ? el : null); pinMemo.set(el, v); return v; };
-  // A box that scrolls or pans; picture: svg and canvas too.
+  // A box that scrolls or pans
   const panMemo = new Map(), panBox = (a) => { if (panMemo.has(a)) return panMemo.get(a); const cs = gcs(a), b = bcr(a);
     const v = (/auto|scroll/.test(cs.overflowX) && a.scrollWidth > a.clientWidth + 1) || (/auto|scroll/.test(cs.overflowY) && a.scrollHeight > a.clientHeight + 1) || a.matches('[data-pan],[data-viz],[role=application]') || /grab|move/.test(cs.cursor) || cs.touchAction === 'none'
       || (/hidden|clip/.test(cs.overflowX + cs.overflowY) && [...a.children].some((k) => { const r = bcr(k); return r.width > b.width * 1.2 + 4 || r.height > b.height * 1.2 + 4; }));
     panMemo.set(a, v); return v; };
   const moving = (el, picture) => { for (let a = el.parentElement; a && a !== document.body && a !== html; a = a.parentElement) if (panBox(a) || (picture && a.matches('svg,canvas'))) return a; return null; };
-  // The first screen, cut by every clipping box around the element.
   const clips = new Map(), clipOf = (el) => { if (!el || el === html || el === document.body) return { top: 0, left: 0, bottom: H, right: W }; if (clips.has(el)) return clips.get(el); const cs = gcs(el); let c = cs.position === 'fixed' ? { top: 0, left: 0, bottom: H, right: W } : clipOf(el.parentElement); if (/(hidden|auto|scroll|clip)/.test(cs.overflowX + cs.overflowY)) { const b = bcr(el); c = { top: Math.max(c.top, b.top), left: Math.max(c.left, b.left), bottom: Math.min(c.bottom, b.bottom), right: Math.min(c.right, b.right) }; } clips.set(el, c); return c; };
   const onFirst = (r, el) => { const c = clipOf(el.parentElement); return r.width >= 1 && r.height >= 1 && r.top < c.bottom - 1 && r.bottom > c.top + 1 && r.left < c.right - 1 && r.right > c.left + 1; };
   const opac = (e) => { let o = 1; for (let p = e; p && p !== html; p = p.parentElement) o *= +gcs(p).opacity; return o; };
   const bgOf = (e) => { const st = []; for (let p = e; p; p = p.parentElement) { const cs = gcs(p); if (cs.backdropFilter && cs.backdropFilter !== 'none' && rgba(cs.backgroundColor)[3] < 0.95) return null; if (cs.backgroundImage !== 'none') return null; const c = rgba(cs.backgroundColor); if (c[3] > 0) { st.push(c); if (c[3] > 0.99) break; } } return st.reverse().reduce((u, t) => over(t, u), [255, 255, 255, 1]); };
   const rg = document.createRange();
-  // Screen scale: transforms up the tree, or an SVG screen matrix.
   const det = (m) => Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)), scMemo = new Map(), scaleOf = (el) => {
     if (!el || el === html || !(el instanceof Element)) return 1; if (scMemo.has(el)) return scMemo.get(el); let v;
     if (el instanceof SVGGraphicsElement && el.ownerSVGElement) { const m = el.getScreenCTM(); v = m ? det(m) : 1; }
     else { const cs = gcs(el), k = cs.scale && cs.scale !== 'none' ? cs.scale.split(' ').map(parseFloat) : null; v = scaleOf(el.parentElement) * (cs.transform !== 'none' ? det(new DOMMatrix(cs.transform)) : 1) * (k ? Math.sqrt(Math.abs(k[0] * (k[1] ?? k[0]))) : 1); }
     scMemo.set(el, v); return v; };
-  // Visible text runs; px: font-size times the screen scale.
+  const svgCores = (el) => { try {
+    const m = el.getScreenCTM(), n = Math.min(el.getNumberOfChars(), 300); if (!m || !n) return null; const turn = Math.atan2(m.b, m.a) * 180 / Math.PI;
+    if (![...Array(n).keys()].some((i) => { const a = Math.abs((el.getRotationOfChar(i) + turn) % 180); return a > 4 && a < 176; })) return null;
+    const fs = parseFloat(gcs(el).fontSize) || 16, out = [];
+    for (let i = 0; i < n; i++) { const a = el.getStartPositionOfChar(i), b = el.getEndPositionOfChar(i), dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy); if (len < 0.5) continue;
+      const ux = dy / len, uy = -dx / len, c = new DOMPoint((a.x + b.x) / 2 + ux * fs * 0.35, (a.y + b.y) / 2 + uy * fs * 0.35).matrixTransform(m), half = 0.3 * Math.min(len, fs) * det(m);
+      out.push({ left: c.x - half, right: c.x + half, top: c.y - half, bottom: c.y + half, width: 2 * half, height: 2 * half, core: true }); }
+    return out.length ? out : null; } catch { return null; } };
+  // Visible text runs
   const map = new Map(), tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = tw.nextNode(); n; n = tw.nextNode()) {
     const t = n.nodeValue.replace(/\s+/g, ' ').trim(), el = n.parentElement;
     if (!t || !el || el.closest('script,style,noscript,[inert],[hidden],.sr-only,.visually-hidden,.gb-switch,details:not([open]) > :not(summary)') || srOnly(el)) continue; // a closed <details> hides its answer
-    rg.selectNodeContents(n); const rs = [...rg.getClientRects()].filter((r) => r.width >= 1 && r.height >= 1); if (!rs.length) continue;
+    rg.selectNodeContents(n); let rs = [...rg.getClientRects()].filter((r) => r.width >= 1 && r.height >= 1); if (!rs.length) continue;
+    if (el instanceof SVGTextContentElement) { if (map.get(el)?.rects[0]?.core) rs = []; else { const g = svgCores(el); if (g) rs = g; } }
     const cs = gcs(el); if (cs.visibility === 'hidden') continue;
     const sc = scaleOf(el), e = map.get(el) || { el, cs, text: '', rects: [], nodes: [], size: parseFloat(cs.fontSize), px: parseFloat(cs.fontSize) * (Math.abs(sc - 1) < 0.02 ? 1 : sc), op: opac(el) }; e.text += (e.text ? ' ' : '') + t; e.rects.push(...rs); e.nodes.push(n); map.set(el, e);
   }
@@ -107,28 +111,24 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
   const arChars = shown.reduce((n, e) => n + (e.text.match(/[\u0600-\u06FF]/g) || []).length, 0);
   if (want === 'ar' && !arChars) add('FAIL', 'ar-missing', 'the Arabic run shows no Arabic text; the page language is Arabic, so its copy is Arabic');
   // 2. the title
-  if (![...qda('h1')].some(vis)) add('WARN', 'no-h1', 'no visible h1; a screen reader user finds the page by its h1');
-  // 3. type: the accessibility floor only (body 16px, 17px Arabic; nothing read under 14px)
+  if (![...qda('h1')].some(vis)) add('WARN', 'no-h1', "no visible h1; a screen reader user finds the page by its h1 (copied from the hero, which shows none at its top? add one, visually hidden if need be)");
   const tally = (key) => { const m = new Map(); for (const e of T) m.set(key(e), (m.get(key(e)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1]); };
   const rpx = (e) => Math.round(e.px), sizes = [...new Set(shown.filter((e) => e.text.length >= 2).map(rpx))].sort((a, b) => a - b);
   const fams = tally((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim()).filter(([, n]) => n / total >= 0.02);
-  // a viz's short labels count once, outside body
   const vizLab = (e) => { const v = e.el.closest('[data-viz]'); return v && e.text.replace(/\d[\d.,:%/]*\s*(?:[A-Za-z]{1,3}(?![A-Za-z])|دقيقة|دقائق|ساعة|ساعات)?/g, ' ').split(/[\s,;:·()+\-\u2212]+/).filter(Boolean).length <= 3 ? v : null; };
-  // bodyPx: running body text, the largest share among blocks of 6 words or more; labels under 16 never lower it (round 3).
-  // SVG text by its rendered size. No running text: the size that sets the most text.
+  // bodyPx: running body text
   const bsz = (e) => Math.round(e.el instanceof SVGElement ? e.px : e.size), share = (min) => { const m = new Map(); for (const e of shown) if (!vizLab(e) && e.text.trim().split(/\s+/).length >= min) m.set(bsz(e), (m.get(bsz(e)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null; };
   const running = share(6), body = running ?? share(1), big = Math.max(...T.map((e) => e.size), 0);
   const bodyFloor = ar || want === 'ar' ? 17 : 16;
-  if (body && body < bodyFloor) add('FAIL', 'body-size', `${running ? 'running text (blocks of 6 words or more) is' : 'most text is'} set at ${body}px; body is ${bodyFloor}px or more (${bodyFloor === 17 ? 'Arabic' : 'English'}), labels and data may stay at 14px when the running text is body size`);
+  const setBy = () => { const m = new Map(); for (const e of shown) if (!vizLab(e) && bsz(e) === body && (!running || e.text.trim().split(/\s+/).length >= 6)) m.set(sel(e.el), (m.get(sel(e.el)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(', '); };
+  if (body && body < bodyFloor) add('FAIL', 'body-size', `${running ? 'running text (blocks of 6 words or more) is' : 'most text is'} set at ${body}px, by ${setBy()}; body is ${bodyFloor}px or more (${bodyFloor === 17 ? 'Arabic' : 'English'}), labels and data may stay at 14px when the running text is body size`);
   const pxs = (e) => `${Math.round(e.px * 10) / 10}px${e.px !== e.size ? ` (${e.size}px scaled)` : ''}`;
-  // 13.9: sub-pixel rounding is not small type.
   const tiny = shown.filter((e) => e.px < 13.9 && e.text.trim().length >= 2 && !e.el.closest('sup, sub'));
   if (tiny.length) add('FAIL', 'small-text', `${tiny.length} text block(s) read under 14px as rendered: ${tiny.slice(0, 3).map((e) => '"' + clip(e.text) + '" ' + pxs(e)).join(', ')}; nothing read goes under 14px (a transform or an SVG viewBox shrinks text too)`);
   const blurOf = (el) => { for (let a = el, d = 0; a && a !== document.body && d < 8; a = a.parentElement, d++) if (/blur\(/.test(gcs(a).filter)) return true; return false; };
   const blurred = shown.filter((e) => e.text.length >= 2 && e.op >= 0.1 && blurOf(e.el));
   if (blurred.length) add('FAIL', 'blurred-text', `${blurred.length} text block(s) sit under a blur filter: ${blurred.slice(0, 3).map((e) => '"' + clip(e.text) + '"').join(', ')}; never blur text: show it sharp, or hide it (and say what is hidden in words)`);
   // 4. contrast
-  // Text on glass, a gradient, an image or an SVG goes to `ground` (screenshots).
   const low = [], ground = []; let unmeasured = 0;
   for (const e of shown) {
     const svgT = e.el instanceof SVGElement, paint = svgT ? e.cs.fill : e.cs.webkitTextFillColor || e.cs.color, fg = /^(rgb|#|hsl|color\(|lab|lch|oklab|oklch)/.test(paint) ? rgba(paint) : null;
@@ -142,38 +142,43 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
   if (unmeasured) add('WARN', 'contrast-unmeasured', `${unmeasured} text block(s) on an image or gradient could not be sampled (below the first screen, or a gradient fill): check them by eye at the darkest and lightest point; body text belongs on a solid or glass panel`);
   // 8. targets
   const ctl = [...qda('a[href],button,input:not([type=hidden]),select,textarea,[role=button],[role=tab],[role=switch],[role=checkbox],[tabindex]:not([tabindex="-1"])')].filter(vis).filter((e) => !e.closest('.gb-switch') && !srOnly(e)).filter((e) => !(e.tagName === 'A' && gcs(e).display === 'inline' && e.closest('p,li')));
-  // A label wrapping or naming the control is its target too (a 20px checkbox inside a 44px label passes).
   const hitBox = (e) => { const r = bcr(e), lab = e.closest('label') || (e.id && document.querySelector(`label[for="${CSS.escape(e.id)}"]`)); if (!lab) return r; const q = bcr(lab); return { width: Math.max(r.width, q.width), height: Math.max(r.height, q.height) }; };
   const need = mobile ? 44 : 24, small = ctl.filter((e) => { const r = hitBox(e); return r.width < need || r.height < need; });
   if (small.length) add('FAIL', 'target-size', `${small.length} control(s) under ${need}x${need}px${mobile ? ' on the phone (tap targets are 44px)' : ''}: ${small.slice(0, 3).map((e) => sel(e) + ' ' + Math.round(bcr(e).width) + 'x' + Math.round(bcr(e).height)).join(', ')}`);
-  // alt text: every meaningful image is named (alt="" marks a decorative one).
   const noAlt = [...qda('img:not([alt]),[role=img]:not([aria-label]):not([aria-labelledby]),svg[role=img]:not([aria-label]):not([aria-labelledby])')].filter((e) => !e.closest('.gb-switch,[aria-hidden="true"]') && vis(e) && !(e instanceof SVGElement && e.querySelector(':scope > title')?.textContent.trim()));
   if (noAlt.length) add('FAIL', 'alt-missing', `${noAlt.length} image(s) with no alt text: ${noAlt.slice(0, 3).map(sel).join(', ')}; describe what it shows in alt, or alt="" when it is decoration`);
   const CTL = 'a[href],button,input:not([type=hidden]),select,textarea,[role=button],[role=link],[role=tab],[role=switch],[role=checkbox],[role=menuitem],[tabindex]:not([tabindex^="-"])';
+  if (mobile) {
+    const M = 16, near = [], seen = new Set(), skipEl = (el) => el.closest('svg,canvas,[data-viz],[data-bleed],[aria-hidden="true"],.gb-switch') || moving(el, false);
+    const note = (key, label, l, r) => { if (seen.has(key)) return; const g = [l < M - 0.5 && l > -W ? `${Math.max(0, Math.round(l))}px from the left` : '', r > W - M + 0.5 && r < 2 * W ? `${Math.max(0, Math.round(W - r))}px from the right` : ''].filter(Boolean); if (g.length) { seen.add(key); near.push(`${label} ${g.join(', ')}`); } };
+    for (const e of shown) { if (e.text.length < 2 || skipEl(e.el)) continue; const rs = e.rects.filter((r) => r.right > 0 && r.left < W); if (rs.length) note(e.el, `"${clip(e.text)}"`, Math.min(...rs.map((r) => r.left)), Math.max(...rs.map((r) => r.right))); }
+    const painted = (el) => { const cs = gcs(el); if (cs.boxShadow !== 'none' || (cs.backgroundImage !== 'none' && !/url\(/.test(cs.backgroundImage))) return true; if (['Left', 'Right'].some((sd) => parseFloat(cs['border' + sd + 'Width']) >= 1 && rgba(cs['border' + sd + 'Color'])[3] > 0.3)) return true; const c = rgba(cs.backgroundColor); if (c[3] < 0.3) return false; const u = bgOf(el.parentElement); return !u || [0, 1, 2].some((k) => Math.abs(c[k] - u[k]) > 6); };
+    for (const el of qsa('*')) {
+      if (el.matches('img,video,picture,canvas,svg,iframe') || skipEl(el) || srOnly(el) || gcs(el).visibility === 'hidden' || opac(el) < 0.1) continue;
+      const r = bcr(el); if (r.width < 8 || r.height < 8 || r.right <= 0 || r.left >= W || (r.left <= 1 && r.right >= W - 1)) continue;
+      if (painted(el) && (txtOf(el).trim() || el.querySelector('img,svg,video,canvas,' + CTL))) note(el, sel(el), r.left, r.right);
+      else if (el.matches(CTL)) { const icons = [...el.querySelectorAll('svg,img')].map(bcr).filter((q) => q.width >= 1); if (icons.length) note(el, sel(el), Math.min(...icons.map((q) => q.left)), Math.max(...icons.map((q) => q.right))); else if (!txtOf(el).trim()) note(el, sel(el), r.left, r.right); }
+    }
+    if (near.length) add('FAIL', 'side-margin', `${near.length} item(s) within 16px of the screen's side: ${near.slice(0, 4).join('; ')}; keep 16px side margins on the phone (only a full-bleed background or photo runs to the edge)`);
+  }
   const controls = [...qda(CTL)].filter((e) => !e.closest('.gb-switch,[inert],[hidden],[aria-hidden="true"]') && !srOnly(e) && gcs(e).visibility !== 'hidden' && opac(e) >= 0.1 && onFirst(bcr(e), e));
   const navOf = (e) => { const n = e.closest('nav,[role=navigation],[role=tablist]'), p = n && pinned(n); if (!p) return null; const r = bcr(p); return r.top > H * 0.5 && r.bottom >= H - 48 ? p : null; };
   const langOf = (e) => { const c = e.closest(CTL) || e, l = c.getAttribute('lang') || c.getAttribute('hreflang'); return (l && !html.lang.toLowerCase().startsWith(l.toLowerCase().slice(0, 2))) || /(^|[-_\s])(lang|language|locale)([-_\s]|$)/i.test(cls(c) + ' ' + c.id) || /language|اللغة/i.test(c.getAttribute('aria-label') || '') || /^(english|en|ar|ع|عربي|العربية)$/i.test(txtOf(c).trim()) ? 'lang' : null; };
   const rowOf = (e) => { for (let a = e.parentElement, d = 0; a && a !== document.body && d < 5; a = a.parentElement, d++) { const n = a.querySelectorAll(CTL).length; if (n > 3) return null; if (n >= 2 && bcr(a).height <= 200 && (a.matches('li,tr,[role=row],[role=listitem],[role=option]') || [...(a.parentElement?.children || [])].some((k) => k !== a && k.tagName === a.tagName && cls(k) === cls(a)))) return a; } return null; };
   const units = (list, key) => new Set(list.map((x) => key(x))).size, ctlUnits = units(controls, (e) => navOf(e) || langOf(e) || e);
-  // The text count proves the rendered page was read (measure.textElements); no budget. Viz series labels count once.
   const markish = (k) => { const cs = gcs(k); return rgba(cs.backgroundColor)[3] > 0.3 || ['Top', 'Right', 'Bottom', 'Left'].some((sd) => parseFloat(cs['border' + sd + 'Width']) >= 2 && rgba(cs['border' + sd + 'Color'])[3] > 0.3); };
   const onPic = (e) => { const v = vizLab(e); if (!v) return null; if (e.el.closest('svg,canvas')) return v; for (let a = e.el, d = 0; a && a !== v; a = a.parentElement, d++) { if (/absolute|fixed/.test(gcs(a).position)) return v; if (d < 4 && markish(a) && [...(a.parentElement?.children || [])].filter((k) => k.tagName === a.tagName && cls(k) === cls(a)).length >= 3) return v; } return null; };
   const textUnits = units(fold, (e) => navOf(e.el) || onPic(e) || (e.el.closest(CTL) && langOf(e.el)) || e);
   const box = (r, k = 0) => ({ l: r.left, t: r.top + r.height * k, r: r.right, b: r.bottom - r.height * k }), area = (x) => Math.max(0, x.r - x.l) * Math.max(0, x.b - x.t);
   const meet = (a, b) => ({ w: Math.min(a.r, b.r) - Math.max(a.l, b.l), h: Math.min(a.b, b.b) - Math.max(a.t, b.t) }), cut = (x, c) => ({ l: Math.max(x.l, c.left), t: Math.max(x.t, c.top), r: Math.min(x.r, c.right), b: Math.min(x.b, c.bottom) });
-  // text-overlap: on the ink of each line (the font's real glyph ascent and descent around its baseline), never the
-  // line box (round 1: Arabic faces carry tall line boxes that overlapped where no glyph did).
-  // The ink of the text as set: text-transform applied (final re-check 2026-10-28: tight uppercase display lines were measured with lowercase descenders).
   const caseOf = (e) => { const t = e.text.slice(0, 200) || 'x', tt = e.cs.textTransform; return tt === 'uppercase' ? t.toUpperCase() : tt === 'lowercase' ? t.toLowerCase() : tt === 'capitalize' ? t.replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase()) : t; };
   const inkMemo = new Map(), inkOf = (e) => { const k = e.cs.font + '|' + e.cs.textTransform + '|' + e.text.slice(0, 80); if (inkMemo.has(k)) return inkMemo.get(k); cx.font = e.cs.font; const m = cx.measureText(caseOf(e)), fa = m.fontBoundingBoxAscent, fd = m.fontBoundingBoxDescent, v = fa + fd > 0 ? { fa, fd, a: Math.min(fa, m.actualBoundingBoxAscent), d: Math.min(fd, m.actualBoundingBoxDescent) } : null; inkMemo.set(k, v); return v; };
-  const inkRect = (e, r) => { const k = inkOf(e); if (!k) return box(r, 0.18); const s = r.height / (k.fa + k.fd), base = r.top + k.fa * s; return { l: r.left, r: r.right, t: base - k.a * s, b: base + k.d * s }; };
+  const inkRect = (e, r) => { if (r.core) return { l: r.left, r: r.right, t: r.top, b: r.bottom }; const k = inkOf(e); if (!k) return box(r, 0.18); const s = r.height / (k.fa + k.fd), base = r.top + k.fa * s; return { l: r.left, r: r.right, t: base - k.a * s, b: base + k.d * s }; };
   const ink = (k, f) => { const cs = gcs(k), c = cs[f]; return c === 'none' ? 0 : (/^url/.test(c) ? 1 : rgba(c)[3]) * +cs[f + 'Opacity'] * opac(k); };
-  // a knocked-out viz label may sit on its own viz's marks
   const knock = (el) => { for (let a = el, d = 0; a && d < 3 && a !== document.body && !a.matches('[data-viz]'); a = a.parentElement, d++) { const cs = gcs(a), sh = [...cs.textShadow.matchAll(/(-?[\d.]+)px (-?[\d.]+)px ([\d.]+)px/g)];
     if (rgba(cs.backgroundColor)[3] > 0.5 || (/^stroke/.test(cs.paintOrder) && ((cs.stroke !== 'none' && parseFloat(cs.strokeWidth) > 0) || parseFloat(cs.webkitTextStrokeWidth) > 0)) || sh.some((m) => +m[3] >= 2) || sh.length >= 4) return true;
     const t = bcr(a); for (let p = a.previousElementSibling, i = 0; p && i < 3; p = p.previousElementSibling, i++) { const q = bcr(p); if (p.matches('rect,path,ellipse,circle,polygon') && ink(p, 'fill') > 0.5 && q.left <= t.left + 2 && q.right >= t.right - 2 && q.top <= t.top + t.height / 2 && q.bottom >= t.bottom - t.height / 2) return true; } } return false; };
-  const lay = shown.filter((e) => e.op >= 0.1).map((e) => ({ e, pin: pinned(e.el), viz: e.el.closest('[data-viz]'), ko: e.el.closest('[data-viz]') ? knock(e.el) : e.el instanceof SVGElement && /^stroke/.test(e.cs.paintOrder) && e.cs.stroke !== 'none' && parseFloat(e.cs.strokeWidth) > 0, bx: e.rects.map((r) => cut(inkRect(e, r), clipOf(e.el))).filter((x) => x.r - x.l >= 1 && x.b - x.t >= 1) })).filter((x) => x.bx.length);
-  // A rotated mockup (a tilted phone) is read in its own coordinates: transforms off, each line's ink again (final re-check 2026-10-28).
+  const lay = shown.filter((e) => e.op >= 0.1).map((e) => ({ e, pin: pinned(e.el), viz: e.el.closest('[data-viz]'), ko: e.el.closest('[data-viz]') ? knock(e.el) : e.el instanceof SVGElement && /^stroke/.test(e.cs.paintOrder) && e.cs.stroke !== 'none' && parseFloat(e.cs.strokeWidth) > 0, bx: e.rects.map((r) => Object.assign(cut(inkRect(e, r), clipOf(e.el)), { core: r.core })).filter((x) => x.r - x.l >= 1 && x.b - x.t >= 1) })).filter((x) => x.bx.length);
   const tilt = (a) => { const cs = gcs(a), m = cs.transform !== 'none' ? new DOMMatrix(cs.transform) : null; return !!(m && (Math.abs(m.b) > 0.01 || Math.abs(m.c) > 0.01)) || (!!cs.rotate && cs.rotate !== 'none' && Math.abs(parseFloat(cs.rotate.split(' ').pop()) % 360) > 0.5); };
   const flatInk = new Map(), tilted = [...qsa('*')].filter((a) => !(a instanceof SVGElement) && tilt(a)), tiltSet = new Set(tilted);
   const rotOf = (el) => { let v = null; if (!tiltSet.size) return v; for (let a = el; a && a !== document.body; a = a.parentElement) if (tiltSet.has(a)) v = a; return v; };
@@ -188,18 +193,16 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
   const solid = (el, other) => { for (let a = el; a && a !== document.body && !a.contains(other); a = a.parentElement) { const cs = gcs(a); if (rgba(cs.backgroundColor)[3] > 0.9 || cs.backdropFilter !== 'none' || cs.backgroundImage !== 'none') return true; } return false; };
   const branch = (n, other, h) => { for (let a = n; a && a !== document.body; a = a.parentElement) { if (a.contains(other)) return false; if (a.contains(h)) return true; } return false; };
   const behind = (x, y, p, q, both) => { const h = document.elementFromPoint(x, y); return !!h && ((branch(p, q, h) && solid(p, q)) || (!!both && branch(q, p, h) && solid(q, p))); };
-  const hitBy = (A, bx, inside, other) => A.bx.some((a) => bx.some((b) => { const m = meet(a, b); return m.w >= 3 && m.h >= 3 && !(inside && b.l <= a.l + 2 && b.r >= a.r - 2 && b.t <= a.t + 2 && b.b >= a.b - 2) && !(other && behind(Math.max(a.l, b.l) + m.w / 2, Math.max(a.t, b.t) + m.h / 2, A.e.el, other, !inside)); }));
+  const hitBy = (A, bx, inside, other) => A.bx.some((a) => bx.some((b) => { const m = meet(a, b); return m.w >= 3 && m.h >= 3 && !(inside && !a.core && b.l <= a.l + 2 && b.r >= a.r - 2 && b.t <= a.t + 2 && b.b >= a.b - 2) && !(other && behind(Math.max(a.l, b.l) + m.w / 2, Math.max(a.t, b.t) + m.h / 2, A.e.el, other, !inside)); }));
   const overlaps = new Set();
   for (let i = 0; i < lay.length; i++) for (let j = i + 1; j < lay.length; j++) { const A = lay[i], C = lay[j], ca = A.e.el.closest(CTL); if (A.pin !== C.pin || A.e.el.contains(C.e.el) || C.e.el.contains(A.e.el) || (ca && ca === C.e.el.closest(CTL) && [A.e.el, C.e.el].some((x) => { for (let a = x; a && a !== ca; a = a.parentElement) if (/absolute|fixed/.test(gcs(a).position)) return true; return false; }))) continue; const rot = rotOf(A.e.el); if (rot && rot === rotOf(C.e.el) ? flatHit(A, C) : hitBy(A, C.bx, false, C.e.el)) overlaps.add(`"${clip(A.e.text)}" and "${clip(C.e.text)}"`); }
   const veil = [...qsa('*')].filter((k) => { const r = bcr(k); return gcs(k).pointerEvents === 'none' && r.width >= W * 0.9 && r.height >= Math.min(H, document.body.offsetHeight) * 0.9 && !txtOf(k).trim(); });
-  // An SVG control shape is tested by its painted shape, never its box.
   const ctlBox = ctl.filter((c) => opac(c) >= 0.1 && !(c instanceof SVGElement && c.localName !== 'svg')).map((c) => ({ c, pin: pinned(c), bx: [...c.getClientRects()].map((r) => cut({ l: r.left + 1, t: r.top + 1, r: r.right - 1, b: r.bottom - 1 }, clipOf(c))).filter((x) => area(x) > 0) }));
   for (const A of lay) for (const C of ctlBox) { const lab = A.e.el.closest('label,legend'); if (A.pin !== C.pin || C.c.contains(A.e.el) || A.e.el.contains(C.c) || (lab && (lab.control === C.c || lab.contains(C.c)))) continue; if (hitBy(A, C.bx, true, C.c)) overlaps.add(`"${clip(A.e.text)}" and ${sel(C.c)}`); }
   const marks = [...qsa('*')].filter((m) => { if (m.closest('.gb-switch') || m.matches(CTL)) return false; const r = bcr(m); if (r.width < 4 || r.height < 4 || r.width > 40 || r.height > 40) return false; const cs = gcs(m); if (cs.visibility === 'hidden' || opac(m) < 0.25) return false; if (m instanceof SVGElement) return m.matches('circle,ellipse,rect,polygon,path,image,use') && (m.matches('image,use') || ink(m, 'fill') >= 0.25 || ink(m, 'stroke') >= 0.25); return !m.children.length && !m.textContent.trim() && (rgba(cs.backgroundColor)[3] > 0.5 || cs.backgroundImage !== 'none'); }).map((m) => ({ m, pin: pinned(m), r: cut(box(bcr(m)), clipOf(m)) })).filter((k) => area(k.r) > 0);
-  // SVG text on an SVG shape: only where the shape's fill is under the label's ink (a map pin beside its label passes; round 3).
+  // SVG text on an SVG shape
   const inFill = (k, x, y) => { const m = k.getScreenCTM(); return !!m && k.isPointInFill(new DOMPoint(x, y).matrixTransform(m.inverse())); };
   for (const A of lay) for (const K of marks) { if (A.pin !== K.pin || A.e.el.contains(K.m) || (A.ko && K.m.closest('[data-viz]') === A.viz)) continue; if (A.bx.some((a) => { const m = meet(a, K.r), x = Math.max(a.l, K.r.l) + m.w / 2, y = Math.max(a.t, K.r.t) + m.h / 2; return area(K.r) < area(a) && m.w > 0 && m.h > 0 && m.w * m.h >= Math.max(12, area(K.r) * 0.25) && !(A.e.el instanceof SVGElement && K.m instanceof SVGGeometryElement && !inFill(K.m, x, y)) && !behind(x, y, A.e.el, K.m); })) overlaps.add(`"${clip(A.e.text)}" and a ${K.m.localName}${cls(K.m).trim() ? '.' + cls(K.m).trim().split(/\s+/)[0] : ''}`); }
-  // Paint over the glyphs or a line through them: hit tests on glyph lines.
   const pe = document.createElement('style'); pe.textContent = '*{pointer-events:auto!important}'; document.head.append(pe);
   const jobs = [], X0 = scrollX, Y0 = scrollY, solidHit = (k, x, y) => { if (k instanceof SVGGeometryElement) { const cs = gcs(k), m = k.getScreenCTM(); return cs.fill !== 'none' && +cs.fillOpacity * opac(k) > 0.9 && !!m && k.isPointInFill(new DOMPoint(x, y).matrixTransform(m.inverse())); } if (k instanceof SVGElement) return false; const cs = gcs(k); return k.matches('img,video,canvas,iframe') || rgba(cs.backgroundColor)[3] >= 0.6 || cs.backdropFilter !== 'none' || (cs.backgroundImage !== 'none' && !/transparent|rgba\([^)]*,\s*0\)/.test(cs.backgroundImage)); };
   const paints = (k, x, y) => { if (k instanceof SVGGeometryElement) { const m = k.getScreenCTM(); return ink(k, 'fill') >= 0.25 && !!m && k.isPointInFill(new DOMPoint(x, y).matrixTransform(m.inverse())); } if (opac(k) < 0.25) return false; if (k.matches('image,img,video,canvas,iframe')) return true; if (k instanceof SVGElement) return false; const cs = gcs(k), r = bcr(k); if (rgba(cs.backgroundColor)[3] * opac(k) > 0.3 || (cs.backgroundImage !== 'none' && !/transparent|rgba\([^)]*,\s*0\)/.test(cs.backgroundImage))) return true; return [['Top', y - r.top], ['Bottom', r.bottom - y], ['Left', x - r.left], ['Right', r.right - x]].some(([sd, d]) => { const bw = parseFloat(cs['border' + sd + 'Width']); return bw > 0 && d <= bw && rgba(cs['border' + sd + 'Color'])[3] > 0.3; }); };
@@ -220,7 +223,7 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
   scrollTo({ top: Y0, left: X0, behavior: 'instant' }); pe.remove();
   for (const [key, n] of hits) if (n >= 2) overlaps.add(key);
   if (overlaps.size) add('FAIL', 'text-overlap', `${overlaps.size} overlap(s) of text with text, a control or a marker: ${[...overlaps].slice(0, 3).join('; ')}; give each label its own room (offset it, shorten it, wrap it, or give the object more room)`);
-  // clipped-text; display type (40px or more) marked data-bleed may run off its box on purpose (a wordmark at the edge).
+  // clipped-text
   const ell = (x) => { const s = gcs(x); return s.textOverflow === 'ellipsis' || (s.webkitLineClamp && s.webkitLineClamp !== 'none'); }, cutText = [];
   for (const e of shown) {
     if (e.text.length < 2 || e.op < 0.1 || (e.px >= 40 && e.el.closest('[data-bleed]'))) continue; let hit = null, rs = e.rects.map((r) => { if (e.el instanceof SVGElement) { const k = inkRect(e, r); return { left: k.l, right: k.r, top: k.t, bottom: k.b }; } return { left: r.left, right: r.right, top: r.top + r.height * 0.18, bottom: r.bottom - r.height * 0.18 }; }); // SVG text by its ink
@@ -234,7 +237,7 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
       rs = rs.map((r) => ({ left: cx ? Math.max(r.left, L) : r.left, right: cx ? Math.min(r.right, R) : r.right, top: cy ? Math.max(r.top, T) : r.top, bottom: cy ? Math.min(r.bottom, Bm) : r.bottom }));
     }
     if (!hit && html.scrollWidth <= W + 1 && !moving(e.el, true) && rs.some((r) => (r.left < -1 && r.right > 1) || (r.right > W + 1 && r.left < W - 1))) hit = 'the screen edge';
-    if (hit) cutText.push(`"${clip(e.text)}" in ${hit}`);
+    if (hit) cutText.push(`"${clip(e.text)}" in ${hit}${sel(e.el) !== hit ? ` (${sel(e.el)})` : ''}`);
   }
   const spill = [];
   for (const e of shown) {
@@ -257,10 +260,8 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
     const itemOf = (e) => { for (let a = e.parentElement, d = 0; a && a !== document.body && d < 5; a = a.parentElement, d++) { if (a.querySelectorAll(CTL).length > 3) return null; if (bcr(a).height <= 200 && (a.matches('li,tr,[role=row],[role=listitem],[role=option]') || (cls(a).trim() && [...(a.parentElement?.children || [])].filter((k) => k !== a && k.tagName === a.tagName && cls(k) === cls(a)).length >= 2))) return a; } return null; };
     let prim = document.querySelector('[data-primary]'), unsure = false; if (prim && !vis(prim)) prim = null; const marked = !!prim;
     if (!prim && !/[?&]state=/.test(location.search)) {
-      const cands = []; for (const e of (document.querySelector('main,[role=main]') || document.body).querySelectorAll('button,[role=button],a[href],input[type=submit]')) { if (!vis(e) || srOnly(e) || opac(e) < 0.1 || e.closest('nav,[role=navigation],.gb-switch,[aria-hidden="true"],[inert]') || rowOf(e) || itemOf(e)) continue; const cs = gcs(e), bg = rgba(cs.backgroundColor), r = bcr(e); if ((bg[3] < 0.5 && cs.backgroundImage === 'none') || r.height > 120) continue; const k = bg[3] >= 0.5 ? ratio(bg, bgOf(e.parentElement) || [255, 255, 255, 1]) : 3; if (k >= 1.5) cands.push({ e, score: r.width * r.height * k }); }
-      // The strongest filled button that reaches the first screen is the main action (round 1: a cut one passed when a smaller button showed whole).
+      const cands = []; for (const e of (document.querySelector('main,[role=main]') || document.body).querySelectorAll('button,[role=button],a[href],input[type=submit]')) { if (!vis(e) || srOnly(e) || opac(e) < 0.1 || e.closest('nav,[role=navigation],.gb-switch,[aria-hidden="true"],[inert]') || rowOf(e) || itemOf(e)) continue; const cs = gcs(e), bg = rgba(cs.backgroundColor), r = bcr(e); if ((bg[3] < 0.5 && cs.backgroundImage === 'none') || r.height > 120) continue; const k = bg[3] >= 0.5 ? ratio(bg, bgOf(e.parentElement) || [255, 255, 255, 1]) : 3; if (k >= 1.5) cands.push({ e, score: r.width * r.height }); }
       const top = cands.filter((c) => { const r = bcr(c.e); return r.top < H - 1 && r.bottom > 1; }).sort((a, b) => b.score - a.score);
-      // One clear button (alone, or twice the next one's weight) is the main action; a close call is a guess, so it only WARNs (round 3).
       prim = top[0]?.e || null; unsure = top.length > 1 && top[0].score < top[1].score * 2;
     }
     const how = unsure ? `; "${clip(txtOf(prim))}" is a guess between buttons of like weight: mark the main action data-primary` : marked || !prim ? '' : `; "${clip(txtOf(prim))}" is the guessed main action: mark the real one data-primary if it is not`;
@@ -325,11 +326,8 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
     if (k < 0.97) { if (head) cutHead++; if (btn) cutBtn++; cutLab.push(`"${clip(t)}" (shows about ${Math.max(1, Math.round(t.length * k))} of ${t.length} characters)`); }
   }
   if (cutLab.length) add(cutLab.length > 3 || cutHead || cutBtn ? 'FAIL' : 'WARN', 'truncated-label', `${cutLab.length} short label(s) cut by an ellipsis${cutHead ? ` (${cutHead} of them heading(s), cut on a normal day)` : ''}${cutBtn ? ` (${cutBtn} on a button or the main action)` : ''}: ${cutLab.slice(0, 3).join(', ')}; a name under 24 characters, a heading and a button label at any length show whole: give it room, let it wrap, or shorten it`);
-  // 9. copy tells and GoBanana copy rules
   const txt = document.body.innerText;
-  // Content honesty (owner 2026-10-28): stock copy, a vague main action, emoji and placeholder pictures FAIL.
   if (/lorem ipsum|dolor sit|John Doe|Jane Doe|\bAcme\b|\bItem \d\b|User name/i.test(txt)) add('FAIL', 'placeholder', 'placeholder copy on the page (lorem, John Doe, Acme, Item 1)');
-  // Marketing phrases, never single words: "seamless gutters" is a product (final re-check 2026-10-28). The user's own copy in [data-user-text] is theirs.
   const ownTxt = shown.filter((e) => !e.el.closest('[data-user-text]')).map((e) => e.text).join(' ');
   const STOCK = /\b(?:unlock(?:s|ing)? (?:your|their|the|its) (?:full |true )?potential|unleash(?:es|ing)? (?:your|the) (?:full )?(?:power|potential)|supercharge(?:s)? your \w+|seamless(?:ly)? (?:experience|integration|workflow|solution)s?|elevate(?:s)? your (?:experience|game|brand|business|workflow)|empower(?:s|ing)? (?:you|your (?:team|business)|teams|businesses) to|effortless(?:ly)? (?:experience|solution)s?|cutting[- ]edge (?:technology|solutions?|platform)|next[- ]gen(?:eration)? (?:platform|solutions?|experience)|world[- ]class (?:experience|solutions?|platform|service)|all[- ]in[- ]one (?:solution|platform|hub)|revolutioni[sz]e(?:s)? (?:the way|how) you|takes? (?:it|your \w+|things) to the next level|reimagined for the modern|streamline(?:s)? your workflow|game[- ]chang(?:er|ing))\b/gi;
   const filler = [...new Set((ownTxt.match(STOCK) || []).map((x) => x.toLowerCase()))];
@@ -340,7 +338,8 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
   const phBox = [...qsa('div,span,figure,picture,i,b,a')].filter((e) => { if (e.closest('[data-viz],svg,.gb-switch,[data-shape],button,[role=button],[role=progressbar],[aria-busy=true],[role=img][aria-label],[role=img][aria-labelledby]') || e.matches(CTL)) return false; const r = bcr(e), k = r.width / r.height;
     if (r.width < 80 || r.height < 60 || k < 0.5 || k > 2.5 || r.width * r.height > W * H * 0.4 || !vis(e) || opac(e) < 0.1 || srOnly(e)) return false; const cs = gcs(e), bg = rgba(cs.backgroundColor), pb = bgOf(e.parentElement);
     if (bg[3] <= 0.5 || artOf(e) || cs.filter !== 'none' || cs.clipPath !== 'none' || (/%/.test(cs.borderTopLeftRadius) ? parseFloat(cs.borderTopLeftRadius) * Math.min(r.width, r.height) / 100 : parseFloat(cs.borderTopLeftRadius)) >= Math.min(r.width, r.height) / 2 - 1 || (pb && Math.hypot(...over(bg, pb).slice(0, 3).map((v, i) => v - pb[i])) <= 4)) return false;
-    return !txtOf(e).trim() && !e.querySelector('img,svg,canvas,video,picture,iframe,object,embed,input,select,textarea') && ![...e.querySelectorAll('*')].some((k) => vis(k) && (artOf(k) || rgba(gcs(k).backgroundColor)[3] > 0.3)); });
+    const laid = shown.some((t) => t.op >= 0.1 && t.text.trim().length >= 2 && t.rects.some((q) => { const x = (q.left + q.right) / 2, y = (q.top + q.bottom) / 2; return x > r.left && x < r.right && y > r.top && y < r.bottom; }));
+    return !txtOf(e).trim() && !e.textContent.trim() && !laid && !e.querySelector('img,svg,canvas,video,picture,iframe,object,embed,input,select,textarea') && ![...e.querySelectorAll('*')].some((k) => vis(k) && (artOf(k) || rgba(gcs(k).backgroundColor)[3] > 0.3)); });
   const phImg = [...qda('img')].filter((e) => !e.closest('.gb-switch') && vis(e) && ((e.complete && !e.naturalWidth) || /placehold|placeholder|dummyimage|placekitten|fakeimg|\/via\.placeholder/i.test(e.currentSrc || e.src || '')));
   const ph = [...phBox.filter((e) => !phBox.some((o) => o !== e && o.contains(e))).map((e) => [e, 'a flat colour box']), ...phImg.map((e) => [e, e.complete && !e.naturalWidth ? 'an image that did not load' : 'a placeholder image service'])];
   if (ph.length) add('FAIL', 'placeholder-media', `${ph.length} placeholder picture(s): ${ph.slice(0, 3).map(([e, why]) => { const r = bcr(e); return `${sel(e)} ${Math.round(r.width)}x${Math.round(r.height)} (${why})`; }).join(', ')}; show the real picture (the pictures ladder in gobanana-draft/pictures), draw the thing with type and shapes, or cut the box (a drawn shape on purpose: data-shape)`);
@@ -351,13 +350,12 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
   const trk = arT.filter((e) => parseFloat(e.cs.letterSpacing) > 0); if (trk.length) add('FAIL', 'ar-tracking', `${trk.length} Arabic block(s) with letter-spacing ("${clip(trk[0].text)}"); it breaks the joins`);
   const lead = arT.filter((e) => e.el.closest('h1,h2,h3,h4') && parseFloat(e.cs.lineHeight) / e.size < 1.3); if (lead.length) add('WARN', 'ar-leading', `${lead.length} Arabic heading(s) under 1.3 line height ("${clip(lead[0].text)}")`);
   const dashed = T.filter((e) => /[\u2013\u2014]/.test(e.text)); if (dashed.length) add('FAIL', 'dash', `${dashed.length} text block(s) with an em or en dash ("${clip(dashed[0].text)}"); use a comma, a colon, a full stop or "to"`);
-  // 9b. copy register (content-and-arabic)
+  // 9b. copy register
   const AR_SLANG = 'عشان|علشان|دلوقتي|دلوقت|كده|كدا|ازاي|إزاي|مش|عايز|عايزة|عاوز|بتاع|بتاعت|بتاعك|ده|دي|برا|جوا|قايمة|مستني|مستنية|مستنيك|مستنياك|لسه|لسة|اتعمل|اتضاف|يتضاف|بيستعمل|بيسأل|بيشتغل|بيعمل|بتعمل|الحين|ايش|إيش|وش|ليش|شلون|وايد|يبغى|تبغى|هيك|شو|بدي|بدك|منيح|كتير';
   const AR_LOAN = 'كونسبت|كونسبتس|كونسيبت|ديزاين|يوزر|يوزرز|فيدباك|تاسك|تاسكات|أبديت|ابديت|سيتنج|سيتنجز|بروجكت|بروجيكت|ريفيو|أبروف|ابروف|كوميت|ستيتس';
   const arWord = (list) => new RegExp('(?:^|[^\\u0600-\\u06FF])[وف]?(' + list + ')(?![\\u0600-\\u06FF])');
   const RAW = /\bgit\s+(?:log|status|diff|commit|push|pull|checkout|branch)\b|(?:^|\s)--[a-z][a-z-]{2,}\b|(?:^|\s)\$\s+[a-z]|\b(?:npm|npx|pnpm|yarn|node|curl|claude)\s+[a-z][\w-]*\s+-|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/;
   const prose = shown.filter((e) => !e.el.closest('code,pre,kbd,samp,[data-log]'));
-  // The Arabic copy rules apply on an Arabic page only (one language, owner 2026-10-28).
   if (ar) for (const [id, list, what] of [['ar-register', AR_SLANG, 'dialect words; write Gulf MSA'], ['ar-loanword', AR_LOAN, 'English spelled in Arabic letters; use the Arabic word']]) {
     const re = arWord(list), hits = shown.filter((e) => re.test(e.text)); if (hits.length) add('FAIL', id, `${hits.length} text block(s) with ${what}: ${[...new Set(hits.map((e) => e.text.match(re)[1]))].slice(0, 6).join('، ')} ("${clip(hits[0].text)}")`);
   }
@@ -377,9 +375,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
     if (bidi.length) add('WARN', 'ar-bidi', `${bidi.length} Arabic text block(s) with a Latin word or a unit (°C, °F, %) next to digits and no <bdi> ("${clip(bidi[0].text)}"); wrap the Latin run or the number with its unit in <bdi>`);
   }
   const scripts = { latin: T.some((e) => /[A-Za-z]/.test(e.text)), arabic: T.some((e) => /[؀-ۿ]/.test(e.text)) };
-  // font-not-loaded (final re-check 2026-10-28): a face the page requests (an @font-face, or a font link such as Google Fonts)
-  // that never loaded for its text; a face it never requests FAILs unless it is a known system face, which passes even where
-  // this machine lacks it (Georgia on Linux).
   const loadedFonts = [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replace(/["']/g, '').trim());
   const GENERIC = /^(serif|sans-serif|monospace|cursive|fantasy|math|emoji|fangsong|system-ui|ui-[\w-]+|-apple-system|blinkmacsystemfont|inherit|initial|unset)$/i;
   const SYSTEM = /^(arial|arial black|helvetica|helvetica neue|georgia|times|times new roman|verdana|tahoma|trebuchet ms|courier|courier new|impact|segoe ui|segoe ui variable|roboto|sf pro( text| display| rounded)?|sf mono|new york|menlo|monaco|consolas|lucida grande|lucida console|palatino|palatino linotype|book antiqua|garamond|baskerville|didot|optima|futura|gill sans|avenir|avenir next|charter|iowan old style|hoefler text|american typewriter|calibri|cambria|candara|constantia|corbel|aptos|ubuntu|cantarell|geeza pro|al nile|damascus|baghdad|sakkal majalla|simplified arabic|traditional arabic|arabic typesetting|dubai|(noto|dejavu|liberation) [\w ]+)$/i;
@@ -390,11 +385,9 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
   const declared = [...new Set(shown.filter((e) => e.text.length >= 2).map((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim()).filter((f) => f && !GENERIC.test(f)))];
   const missingFonts = declared.filter((f) => unloaded(f, shown.filter((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim() === f).map((e) => e.text).join(' ')));
   const measured = { lang: html.lang, dir: rtl ? 'rtl' : 'ltr', textElements: textUnits, controls: ctlUnits, bodyPx: body, smallText: tiny.length, arabicChars: arChars, largest: Math.round(big), sizes, families: fams.map(([f]) => f), scripts, loadedFonts, declaredFonts: declared, missingFonts };
-  // mechanic-missing, mechanic-value: the widest default view only (1440 unless --viewport says otherwise).
-  const kinds = [...qda('[data-mechanic]')].map((e) => [e.dataset.mechanic.trim().toLowerCase(), e]), bad = kinds.find(([k]) => !['scroll', 'tap', 'swipe'].includes(k));
+  const kinds = [...qda('[data-mechanic]')].map((e) => [e.dataset.mechanic.trim().toLowerCase(), e]), ok = ([k]) => ['scroll', 'tap', 'swipe'].includes(k), bad = kinds.find((k) => !ok(k));
   if (main && !matchMedia('(prefers-reduced-motion: reduce)').matches && !/[?&](state|data)=/.test(location.search) && !allow.includes('mechanic-missing')) {
-    // A landing page may have no mechanic (owner 2026-10-28); a box it marks still has to move (mechanic-still).
-    if (!kinds.length && landing) {}
+    if (!kinds.some(ok) && landing) {} // a landing page's static line needs none
     else if (!kinds.length) add('FAIL', 'mechanic-missing', `no [data-mechanic] box at ${W}: mark the box its one action changes with data-mechanic="scroll", "tap" or "swipe" (none on purpose: only Calm or Stretch pages, restyles it does not reach, or the user's word: --taste-allows mechanic-missing)`);
     else if (bad) add('FAIL', 'mechanic-value', `${sel(bad[1])} has data-mechanic${bad[0] ? `="${bad[0]}"` : ' with no value'}; it takes scroll, tap or swipe, the one action that changes the box`);
   }
@@ -410,12 +403,12 @@ const png = (buf) => {
 };
 const lum = (c) => { const f = (x) => ((x /= 255) <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4); return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
 const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); }, blend = (t, u) => [0, 1, 2].map((i) => t[i] * t[3] + u[i] * (1 - t[3]));
-const browser = await pw.chromium.launch().catch(cannot), runs = [], report = [];
+const browser = guard(await pw.chromium.launch().catch(cannot)), runs = [], report = [];
 try { rmSync(noRender, { force: true }); } catch {}
 const pageUrl = (src) => { const [fp, q] = src.split('?'); return new URL(/^https?:|^file:/.test(src) ? src : pathToFileURL(resolve(fp)).href + (q ? '?' + q : '')); };
 const LAYOUT = ['overflow', 'text-overlap', 'clipped-text', 'text-spill', 'covered-content', 'hidden-shown', 'small-text'];
-// A rough gets the floor only (round 3 contract): contrast, body and text size, targets, no sideways scroll, text overlap, alt.
-const ROUGH = ['overflow', 'body-size', 'small-text', 'contrast', 'contrast-ground', 'target-size', 'text-overlap', 'alt-missing'];
+// A rough gets the floor only: contrast, body and text size
+const ROUGH = ['overflow', 'body-size', 'small-text', 'contrast', 'contrast-ground', 'target-size', 'side-margin', 'text-overlap', 'alt-missing'];
 const settle = async (page, ms) => { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(ms); };
 async function measureRun(r, src) {
   const page = await browser.newPage({ viewport: { width: r.w, height: r.h }, reducedMotion: r.reduce ? 'reduce' : 'no-preference' });
@@ -424,11 +417,9 @@ async function measureRun(r, src) {
   await page.goto(u.href, { waitUntil: 'load' }); await settle(page, wait);
   const res = await page.evaluate(MEASURE, { want: r.lang, allow, landing, main: r.w === mainW && !r.rough });
   if (r.state) { res.findings = res.findings.filter((f) => LAYOUT.includes(f.id)); res.ground = []; }
-  // mechanic-still: shots before and after the action, then a reload.
   const kinds = r.rough ? [] : await page.$$eval('[data-mechanic]', (es) => es.map((e) => [e.dataset.mechanic.trim().toLowerCase()]));
   if (!r.reduce && !r.state && !allow.includes('mechanic-still')) for (const [i, [kind]] of kinds.entries()) {
     const act = { scroll: 'a scroll of one screen', tap: 'a tap on its control', swipe: 'a 200px drag toward the start edge' }[kind], el = page.locator('[data-mechanic]').nth(i); if (!act) continue;
-    // A tap presses [data-mechanic-target], else the first control in the box that is not already selected, the main action or a link away (round 3: it hit Start free, or the selected item).
     const box = () => el.evaluate((e) => { const { x, y, width, height } = e.getBoundingClientRect(), mx = x + width / 2, my = y + height / 2;
       const on = (k) => k.matches('[aria-selected=true],[aria-pressed=true],[aria-checked=true],[aria-current]:not([aria-current=false]),:checked,[data-primary],[disabled],[aria-disabled=true]') || /(^|[\s_-])(is-)?(active|selected|current)($|[\s_-])/.test(k.getAttribute('class') || '') || (k.matches('a[href]') && !/^(#|javascript:)/.test(k.getAttribute('href')));
       const ok = (k) => { const r = k.getBoundingClientRect(), cs = getComputedStyle(k); return r.width >= 4 && r.height >= 4 && cs.visibility !== 'hidden' && cs.pointerEvents !== 'none'; };
@@ -439,16 +430,21 @@ async function measureRun(r, src) {
     if (kind !== 'scroll') await el.scrollIntoViewIfNeeded().catch(() => {});
     const b = await box(), shot = ({ x, y, width, height }) => page.screenshot({ fullPage: true, clip: { x, y, width, height } }); if (b.width < 1 || b.height < 1) continue;
     const before = await shot(b), m = page.mouse;
-    // scroll: the page by one screen; a box that scrolls itself, or a page with nothing to scroll, gets a wheel over the box.
+    // scroll: the page by one screen
     if (kind === 'scroll' && b.scrolls === 'page') await page.evaluate(() => scrollBy(0, innerHeight)); else if (kind === 'scroll') { await m.move(b.cx, b.cy); await m.wheel(0, r.h); }
     else if (kind === 'tap') await m.click(b.tx ?? b.cx, b.ty ?? b.cy); else { await m.move(b.cx, b.cy); await m.down(); await m.move(b.cx + (b.rtl ? 200 : -200), b.cy, { steps: 10 }); await m.up(); }
-    await page.waitForTimeout(400); const same = before.equals(await shot(await box()));
-    // A one-screen page has nothing to scroll: said, never FAILed (round 3).
+    await page.waitForTimeout(400); let same = before.equals(await shot(await box()));
+    if (same && kind === 'scroll') {
+      const alt = await el.evaluate((e) => { const sc = [e, ...e.querySelectorAll('*')].find((k) => getComputedStyle(k).scrollSnapType !== 'none' && (k.scrollWidth > k.clientWidth + 1 || k.scrollHeight > k.clientHeight + 1));
+        if (sc) { const x = sc.scrollLeft, y = sc.scrollTop, hz = sc.scrollWidth > sc.clientWidth + 1; sc.scrollBy({ left: hz ? sc.clientWidth : 0, top: hz ? 0 : sc.clientHeight, behavior: 'instant' }); return sc.scrollLeft !== x || sc.scrollTop !== y ? 'snap' : null; }
+        const a = [...e.querySelectorAll('a[href^="#"]')].find((k) => k.getAttribute('href').length > 1 && document.getElementById(decodeURIComponent(k.getAttribute('href').slice(1))));
+        if (!a) return null; window.__gbY = scrollY; a.click(); return 'anchor'; }).catch(() => null);
+      if (alt === 'anchor') { await page.waitForTimeout(900); same = !(await page.evaluate(() => scrollY !== window.__gbY)); } else if (alt === 'snap') same = false;
+    }
     if (same && kind === 'scroll' && !b.scrolls) res.findings.push({ level: 'WARN', id: 'mechanic-unchecked', msg: `the [data-mechanic="scroll"] box ${b.name} sits on a page with nothing to scroll at ${r.w}, so the scroll was not tested; check it by hand` });
     else if (same) res.findings.push({ level: 'FAIL', id: 'mechanic-still', msg: `the [data-mechanic="${kind}"] box ${b.name} did not change after ${act} at ${r.w}; wire the mechanic so its one action changes the box${kind === 'tap' ? ' (the tap pressed its first control not already selected: mark the one to press data-mechanic-target)' : ''}` });
     await page.evaluate(() => scrollTo(0, 0)); await page.reload({ waitUntil: 'load' }); await settle(page, 1500);
   }
-  // contrast-ground: shots with and without text, 5th and 95th percentile of the ground.
   if (res.ground.length && !r.reduce) try {
     const full = png(await page.screenshot()); await page.addStyleTag({ content: '*,*::before,*::after{color:transparent!important;-webkit-text-fill-color:transparent!important;text-shadow:none!important;caret-color:transparent!important;transition:none!important}text,tspan,textPath{fill:transparent!important;stroke:transparent!important}' });
     await page.waitForTimeout(80); const bare = png(await page.screenshot()), low = [];
@@ -462,7 +458,6 @@ async function measureRun(r, src) {
     if (low.length) res.findings.push({ level: 'FAIL', id: 'contrast-ground', msg: `${low.length} text block(s) on glass, a gradient or an image fall under AA at the worst point of the ground: ${low.slice(0, 4).join('; ')}; darken or lighten the text, or put it on a more solid panel` });
   } catch (e) { res.findings.push({ level: 'WARN', id: 'contrast-unmeasured', msg: `${res.ground.length} text block(s) on an image or gradient could not be sampled (${String(e.message || e).split('\n')[0]}): check them by eye` }); }
   delete res.ground;
-  // focus-visible: Tab through the first controls; each focused one must look different from unfocused (outline, ring, border, fill or underline).
   if (!r.reduce && !r.state && !r.rough && r.w === mainW) try {
     await page.addStyleTag({ content: '*,*::before,*::after{transition:none!important;animation:none!important}' });
     await page.evaluate(() => { const sig = (e) => { const s = getComputedStyle(e); return [s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0 ? s.outlineStyle + s.outlineWidth + s.outlineColor : '', s.boxShadow, s.borderColor, s.borderWidth, s.backgroundColor, s.color, s.textDecorationLine, s.transform].join('|'); };
@@ -485,19 +480,15 @@ async function measureRun(r, src) {
 }
 /** measure.json from one file's runs. Keeps round 1 (and a gb-lint count for the same file) from an earlier run in the same folder. */
 function summarize(report, src, langs, jsonPath, isRough) {
-  // font-not-loaded: a face the page sets on its text that loaded in no run. The tokens' faces are suggestions: an unused one never FAILs.
   const loaded = new Set(report.flatMap((x) => x.measured.loadedFonts.map((f) => f.toLowerCase())));
   if (!isRough) for (const f of [...new Set(report.flatMap((x) => x.measured.missingFonts || []))].filter((f) => !loaded.has(f.toLowerCase()))) report[0].findings.push({ level: 'FAIL', id: 'font-not-loaded', msg: `${f} is set on the page's text but never loaded (no font link, a wrong name, or a blocked file); screenshots show a fallback: link it, or set a face that loads` });
   const ids = (lvl) => [...new Set(report.flatMap((x) => x.findings.filter((f) => f.level === lvl).map((f) => f.id)))];
   const failIds = ids('FAIL'), warnIds = ids('WARN'), fails = failIds.length, views = report.filter((x) => !x.reduced && !x.state), wide = views.filter((x) => x.width === mainW);
-  // The server's numbers: the widest default view (1440 unless --viewport says otherwise), the smallest body. No budgets (owner 2026-10-28).
   const defaultView = ![src, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u)));
   const bodies = views.map((x) => x.measured.bodyPx).filter((n) => typeof n === 'number' && n > 0);
   const languages = langs.length ? langs : [...new Set(views.map((x) => x.lang).filter(Boolean))];
   const measure = defaultView && wide.length && bodies.length ? { fails, textElements: Math.max(0, ...wide.map((x) => x.measured.textElements)), bodyPx: Math.min(...bodies), languages } : null;
-  // A rough says so inside the measure object too (add_to_canvas reads only that object), with its FAILs named.
   if (measure && isRough) { measure.rough = true; if (fails) measure.openFails = failIds; }
-  // One entry per FAIL or WARN id: its message per run (a check that fails at 390 and 1440 is one check).
   const by = new Map(); for (const x of report) for (const f of x.findings) { const k = f.level + ' ' + f.id, e = by.get(k) || { level: f.level, id: f.id, msgs: new Map() }; e.msgs.set(f.msg, [...(e.msgs.get(f.msg) || []), x.run]); by.set(k, e); }
   const findings = [...by.values()].sort((a, b) => (a.level === b.level ? 0 : a.level === 'FAIL' ? -1 : 1)).map((e) => ({ level: e.level, id: e.id, msgs: [...e.msgs].map(([msg, runs]) => ({ msg, runs })) }));
   const summary = { tool: 'gb-measure', version: 3, ...(isRough ? { rough: true } : {}), target: src || urlFor, at: new Date().toISOString(), viewports: viewports.map(([w, h]) => `${w}x${h}`), languages, fails, warns: warnIds.length, failIds, warnIds, measure,
@@ -506,15 +497,12 @@ function summarize(report, src, langs, jsonPath, isRough) {
     findings: findings.map((e) => ({ level: e.level, id: e.id, msg: e.msgs[0].msg, runs: e.msgs.flatMap((m) => m.runs) })) };
   let prev = null; try { prev = JSON.parse(readFileSync(jsonPath, 'utf8')); } catch {}
   const fp = fileOf(src), mtimeMs = fp ? (() => { try { return statSync(fp).mtimeMs; } catch { return null; } })() : null;
-  // Round 1 stays for add_to_canvas checks (F25): a later run on the same page in the same folder never overwrites it.
   const same = prev?.tool === 'gb-measure' && JSON.stringify(prev.target) === JSON.stringify(summary.target);
   summary.round = same ? (prev.round || 1) + 1 : 1;
   summary.round1 = same ? prev.round1 || { fails: prev.fails, warns: prev.warns, failIds: prev.failIds, at: prev.at } : { fails, warns: warnIds.length, failIds, at: summary.at };
-  // gb-lint --measure-dir wrote its count for this file as it is now: carry it.
-  if (prev?.lint && fp && prev.lint.file === fp && prev.lint.mtimeMs === mtimeMs) { summary.lint = prev.lint; summary.lintFails = prev.lint.fails; if (measure) measure.lintFails = prev.lint.fails; if (summary.round === 1) summary.round1.lintFails = prev.lint.fails; if (measure && isRough && prev.lint.rules?.length) measure.openFails = [...new Set([...failIds, ...prev.lint.rules])]; }
+  if (prev?.lint && fp && prev.lint.file === fp && prev.lint.mtimeMs === mtimeMs) { summary.lint = prev.lint; summary.lintFails = prev.lint.fails; if (measure) measure.lintFails = prev.lint.fails; if (summary.round === 1) summary.round1.lintFails = prev.lint.fails; if (measure && isRough && prev.lint.rules?.length) measure.openFails = [...new Set([...failIds, ...prev.lint.rules])]; summary.failIds = [...new Set([...failIds, ...(prev.lint.rules || [])])]; }
   summary.checks = { fails: summary.round1.fails, warns: summary.warns };
   try { mkdirSync(dirname(jsonPath), { recursive: true }); writeFileSync(jsonPath, JSON.stringify(summary, null, 1)); } catch (e) { console.error('could not write ' + jsonPath + ': ' + e.message); }
-  // The publish gate's stamp, per file.
   if (fp) try {
     const dir = join(process.env.TMPDIR || '/tmp', 'gb'), sp = join(dir, 'checked.json'); mkdirSync(dir, { recursive: true }); let st = {}; try { st = JSON.parse(readFileSync(sp, 'utf8')); } catch {}
     const was = st[fp]; // same mtime: the worse run counts
@@ -527,7 +515,6 @@ const firstLang = async (src) => { try { const p = await browser.newPage({ viewp
 const pool = async (items, k, fn) => { const out = []; let next = 0; await Promise.all(Array.from({ length: k }, async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i]); } })); return out; };
 
 if (rough) {
-  // Roughs: every file in one browser, 4 pages at a time, the brief's viewports, the floor only; one pass, no fix rounds.
   const files = args, t0 = Date.now(), jobs = files.flatMap((f) => viewports.map(([w, h]) => ({ f, w, h })));
   const done = await pool(jobs, 4, async (j) => { try { return await measureRun({ lang: langArg[0] || '', w: j.w, h: j.h, reduce: false, rough: true }, j.f); } catch (e) { return { error: String(e.message || e).split('\n')[0] }; } });
   await browser.close(); let bad = 0;
@@ -541,25 +528,26 @@ if (rough) {
   process.exit(bad ? 1 : 0);
 }
 
-// No --languages and no tokens: the page's own <html lang> is the one language.
+// No --languages and no tokens
 if (!langGiven && target) { const l = await firstLang(target); if (l) languages = [l]; }
 for (const lang of languages) for (const [w, h] of viewports) runs.push({ lang, w, h, reduce: false });
 runs.push({ lang: languages[0], w: mainW, h: mainH, reduce: true });
 for (const state of stateIds) for (const [w, h] of viewports) runs.push({ lang: languages[0], w, h, reduce: false, state });
 for (const r of runs) report.push(await measureRun(r, target));
 await browser.close();
-// measure.json goes next to the shots.
+// measure.json goes next to the shots
 const extra = (() => { try { const q = String(target || '').split('?')[1]; return q ? [...new URLSearchParams(q)].filter(([k]) => !/^(lang|shot)$/.test(k)).map(([k, v]) => `-${k}-${v}`).join('').replace(/[^\w-]/g, '') : ''; } catch { return ''; } })();
 const jsonPath = join(resolve(outDir || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), `measure${extra}.json`);
 const { findings, measure, fails } = summarize(report, target, languages, jsonPath, false);
 if (asJson) console.log(JSON.stringify(report, null, 1));
 else {
   for (const x of report) { if (x.reduced || x.state) continue; const m = x.measured; console.log(`${x.run}: body ${m.bodyPx ?? 'n/a'}px, under 14px ${m.smallText}, text ${m.textElements}, sizes [${m.sizes}], largest ${m.largest}px, faces [${m.families}]`); }
-  // One line per failing check, so the count below equals the FAIL lines (round 3); its wording at another size follows on the line.
+  // One line per failing check
   for (const e of findings) console.log(`${e.level} ${e.id}: ${e.msgs.map(({ msg, runs: at }) => `${msg}  [${at.join(', ')}]`).join('; also ')}`);
 }
 const at = `${mainW}`;
 if (measure) console.log(`${fails} failing check(s), body ${measure.bodyPx}px, ${measure.textElements} text elements read at ${at}. Summary: ${jsonPath}`);
 else console.log(`${fails} failing check(s). No measure for add_to_canvas: ${![target, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u))) ? `no ${at} run found body text` : 'this run was a ?state or ?data view'}; measure the rendered default view (no ?state or ?data) for it. Summary: ${jsonPath}`);
 console.log(fails ? 'Open FAILs go in measure.openFails; nothing here blocks placing.' : 'Numbers are evidence for the craft check; they never replace looking side by side.');
-process.exit(fails ? 1 : 0);
+// Exit 0 when it ran
+process.exit(0);

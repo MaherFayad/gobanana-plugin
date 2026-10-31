@@ -1,6 +1,7 @@
-// gb-tools v5: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v8: bump it in every script and the fetch line on any change.
 // gb-spread: are these concepts really different? Where text, panels and media sit on each first screen.
 //   node gb-spread.mjs <a.html|url> <b.html|url> [more] [--lang en] [--w 1440 --h 900] [--max 0.7] [--json]
+import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process';
 import { basename, join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
 
@@ -12,7 +13,7 @@ if (targets.length < 2) { console.error('usage: node gb-spread.mjs <a.html|url> 
 const req = createRequire(import.meta.url);
 let pw; try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); }
 
-// In the page: a 24 x 15 first-screen grid of text, panels and media, plus the ground.
+// In the page: a 24 x 15 first-screen grid of text
 function SKELETON({ cols, rows }) {
   const W = innerWidth, H = innerHeight, cw = W / cols, ch = H / rows, grid = () => new Uint8Array(cols * rows);
   const T = grid(), P = grid(), M = grid();
@@ -23,7 +24,6 @@ function SKELETON({ cols, rows }) {
   const skip = (e) => e.closest('script,style,noscript,[hidden],[aria-hidden="true"],.gb-switch,.sr-only,.visually-hidden');
   const rg = document.createRange(), tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = tw.nextNode(); n; n = tw.nextNode()) { if (!n.nodeValue.trim() || !n.parentElement || skip(n.parentElement) || getComputedStyle(n.parentElement).visibility === 'hidden') continue; rg.selectNodeContents(n); for (const r of rg.getClientRects()) if (r.width >= 1) mark(T, r); }
-  // The ground: the commonest opaque background behind five first-screen points.
   const behind = (x, y) => { for (let e = document.elementFromPoint(x, y); e; e = e.parentElement) { const c = rgba(getComputedStyle(e).backgroundColor); if (c[3] > 0.5) return c; } return [255, 255, 255, 1]; };
   const seen = [[0.5, 0.5], [0.05, 0.5], [0.95, 0.5], [0.5, 0.95], [0.5, 0.05]].map(([x, y]) => behind(W * x, H * y)), key = (c) => c.slice(0, 3).join();
   const ground = seen.sort((a, b) => seen.filter((c) => key(c) === key(b)).length - seen.filter((c) => key(c) === key(a)).length)[0];
@@ -42,7 +42,7 @@ function SKELETON({ cols, rows }) {
 const jac = (a, b) => { let i = 0, u = 0; for (let k = 0; k < a.length; k++) { const x = a[k] === '1', y = b[k] === '1'; if (x || y) u++; if (x && y) i++; } return u ? i / u : null; };
 const sim = (a, b) => { let s = 0, w = 0; for (const [k, wt] of [['T', 0.45], ['P', 0.4], ['M', 0.15]]) { const j = jac(a[k], b[k]); if (j != null) { s += j * wt; w += wt; } } return w ? s / w : 0; };
 
-const browser = await pw.chromium.launch(), res = [];
+const browser = guard(await pw.chromium.launch()), res = [];
 await Promise.all(targets.map(async (t, i) => {
   const page = await browser.newPage({ viewport: { width: W, height: H } });
   const [fp, q] = t.split('?'), u = new URL(/^https?:|^file:/.test(t) ? t : pathToFileURL(resolve(fp)).href + (q ? '?' + q : ''));

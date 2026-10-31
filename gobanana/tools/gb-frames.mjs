@@ -1,7 +1,6 @@
-// gb-tools v5: a fetch line refetches a cached copy without this tag. Bump it in every script and fetch line when any script changes.
+// gb-tools v8: bump it in every script and the fetch line on any change.
 // gb-frames: a video or GIF reference as one sheet of time-labelled frames, made here.
 //   node gb-frames.mjs <post or page url | video file> [--frames 12] [--max 20] [--out <dir>] [--name <file>]
-// X, Dribbble, Pinterest, og:video or <video> pages; YouTube, Vimeo, Instagram, TikTok via yt-dlp. Temp video, deleted.
 // Exit 0 sheet, 1 no video, 2 usage, 3 no ffmpeg or network blocked.
 import { spawnSync } from 'node:child_process'; import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
@@ -9,7 +8,7 @@ import { join, resolve } from 'node:path'; import { pathToFileURL } from 'node:u
 export const LIMITS = { frames: 12, maxSeconds: 20, minGap: 0.08, sheetPx: 1600, sheetBytes: 900_000, videoBytes: 80_000_000 };
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
 
-// Where a URL's video comes from; a file path is read as it is.
+// Where a URL's video comes from
 export function sourceOf(input) {
   let u; try { u = new URL(input); } catch { return existsSync(String(input)) ? { kind: 'file', path: resolve(input) } : null; }
   if (!/^https?:$/.test(u.protocol)) return null;
@@ -23,7 +22,7 @@ export function sourceOf(input) {
   return { kind: 'page', host, url: u.href };
 }
 
-// The tweet's mp4: the smallest 480 wide or more, else the smallest.
+// The tweet's mp4: the smallest 480 wide or more
 const widthOf = (url) => +(/\/(\d{2,5})x\d{2,5}\//.exec(url)?.[1] || 0);
 export function pickVariant(tweet) {
   const media = [...(tweet?.mediaDetails || []), ...(tweet?.quoted_tweet?.mediaDetails || [])].filter((m) => /^(video|animated_gif)$/.test(m?.type));
@@ -34,14 +33,14 @@ export function pickVariant(tweet) {
   return { url: v.url, media: m.type === 'animated_gif' ? 'GIF' : 'video', width: widthOf(v.url) || null, duration: m.video_info.duration_millis ? m.video_info.duration_millis / 1000 : null, count: media.length };
 }
 
-// N frame times over the first maxSeconds, minGap apart, mid slice.
+// N frame times over the first maxSeconds, minGap apart, mid slice
 export function frameTimes(duration, count = LIMITS.frames, maxSeconds = LIMITS.maxSeconds) {
   const d = Number(duration) > 0 ? Number(duration) : 0, window = Math.min(d, maxSeconds);
   const n = Math.max(1, Math.min(count, Math.floor(window / LIMITS.minGap) || 1));
   return { times: Array.from({ length: n }, (_, i) => Math.round((window * (i + 0.5)) / n * 100) / 100), window, capped: d > maxSeconds };
 }
 
-// Columns, rows and tile size within sheetPx (aspect: height over width).
+// Columns, rows and tile size within sheetPx
 export function grid(n, aspect = 1) {
   const cols = n <= 3 ? n : n === 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.ceil(n / cols), pad = 6, a = aspect > 0 ? aspect : 1;
   const fit = (k) => (LIMITS.sheetPx - pad * (k + 1)) / k, w = Math.floor(Math.min(360, fit(cols), fit(rows) / a) / 2) * 2;
@@ -55,7 +54,7 @@ export function probeInfo(text) {
   return { duration: d ? +d[1] * 3600 + +d[2] * 60 + +d[3] : null, width: turned ? h : w, height: turned ? w : h };
 }
 
-// og:video, twitter:player:stream, <video> src, any mp4 or m3u8 link.
+// og:video, twitter:player:stream, <video> src
 export function videoInPage(html, base) {
   const abs = (s) => { try { return new URL(s.replace(/&amp;/g, '&').replace(/\\u002F/gi, '/').replace(/\\\//g, '/'), base).href; } catch { return null; } };
   const metas = [...html.matchAll(/<meta\b[^>]*>/gi)].map((m) => m[0]).filter((t) => /(?:property|name)=["'](?:og:video(?::secure_url|:url)?|twitter:player:stream)["']/i.test(t)).map((t) => /content=["']([^"']+)/i.exec(t)?.[1]);
@@ -70,7 +69,7 @@ const run = (bin, args, o = {}) => spawnSync(bin, args, { encoding: 'utf8', maxB
 const python = () => ['python3', 'python'].find((p) => run(p, ['--version']).status === 0) || null;
 const pipInstall = (py, pkg) => { console.error(`Installing the ${pkg} Python package (pip, user install)...`); const a = ['-m', 'pip', 'install', '--user', '-q', pkg]; return run(py, a, { timeout: 180_000 }).status === 0 || run(py, [...a, '--break-system-packages'], { timeout: 180_000 }).status === 0; };
 
-// ffmpeg on PATH, else imageio-ffmpeg's binary.
+// ffmpeg on PATH, else imageio-ffmpeg's binary
 function findFfmpeg() {
   const ok = (b) => !!b && run(b, ['-version'], { stdio: 'ignore' }).status === 0;
   for (const b of [process.env.FFMPEG, 'ffmpeg']) if (ok(b)) return b;
@@ -80,7 +79,7 @@ function findFfmpeg() {
   return ok(b) ? b : null;
 }
 
-// curl (it follows the proxy), else fetch.
+// curl, else fetch
 async function get(url, file, max = LIMITS.videoBytes) {
   const r = run('curl', ['-sSL', '--max-time', '90', '--max-filesize', String(max), '-A', UA, '-w', '\n%{http_code}', '-o', file || '-', url]);
   if (!r.error) {
@@ -93,7 +92,7 @@ async function get(url, file, max = LIMITS.videoBytes) {
     return { status: res.status, body: file && res.ok ? '' : buf.toString('utf8'), err: '' };
   } catch (e) { return { status: 0, body: '', err: String(e?.cause?.message || e.message) }; }
 }
-// A proxy that denies the host: a 403 naming its allowlist, or a refused CONNECT.
+// A proxy that denies the host: a 403 naming its allowlist
 const blocked = (r) => /blocked-by-allowlist|allowlist/i.test(r.body) || /CONNECT tunnel failed, response 40[37]/i.test(r.err);
 function check(r, url, what, src) {
   if (blocked(r)) {
@@ -176,7 +175,7 @@ async function main() {
       const frame = (lab) => run(ff, ['-loglevel', 'error', '-y', '-ss', String(t), '-i', video, '-frames:v', '1', '-vf', `scale=${g.w}:${g.h}${lab ? label(t) : ''}`, join(work, `f${String(i).padStart(3, '0')}.png`)]);
       let r = frame(labelled);
       if (r.status !== 0 && labelled) { labelled = false; r = frame(false); }
-      // Past the last frame nothing is written: take one a little earlier.
+      // Past the last frame nothing is written
       if (r.status === 0 && !existsSync(join(work, `f${String(i).padStart(3, '0')}.png`)) && t > 0.3) { times[i] = t = Math.round((t - 0.3) * 100) / 100; r = frame(labelled); }
       if (r.status !== 0 || !existsSync(join(work, `f${String(i).padStart(3, '0')}.png`))) throw new Stop(1, `Cannot read this source: ffmpeg could not take the frame at ${t} s (${(r.stderr || 'no frame there').trim().split('\n').pop()}).`);
     }
