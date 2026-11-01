@@ -1,4 +1,4 @@
-// gb-tools v8: bump it in every script and the fetch line on any change.
+// gb-tools v9: the core fetch line's tag.
 // gb-lint: motion, phone and 14px floor checks. node gb-lint.mjs <file.html> [--fix] [--measure-dir <dir>] (lint-<rule> ids into measure.json)
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"; import { join, resolve } from "node:path";
 const argv = process.argv.slice(2), ti = argv.indexOf("--tokens"), mi = argv.indexOf("--measure-dir"), file = argv.find((a, i) => !a.startsWith("--") && (ti < 0 || i !== ti + 1) && (mi < 0 || i !== mi + 1));
@@ -6,16 +6,16 @@ if (!file || (mi >= 0 && !argv[mi + 1])) { console.error("usage: node gb-lint.mj
 let src = readFileSync(file, "utf8");
 const styleText = (s) => (/<style/i.test(s) ? [...s.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n") : s);
 if (argv.includes("--fix")) {
-  const fixed = [], was = src, TAP = "html{-webkit-tap-highlight-color:transparent}", styled = /<style/i.test(src);
-  let n = 0, t = src; const dvh = (c) => c.replace(/\b100vh\b/g, () => (n++, "100dvh"));
-  if (/<[a-z!]/i.test(src) && !/<head(?=[\s>])/i.test(src)) { const h = (src.match(/<html(?=[\s>])[^>]*>/i) || [])[0]; src = h ? src.replace(h, (m) => m + "<head></head>") : src.replace(/^(\s*<!doctype[^>]*>\s*)?/i, (d) => (d || "") + "<head></head>\n"); fixed.push(h ? "head: no <head>, added one after <html>" : "head: no <head> or <html>, added <head> at the top"); }
-  src = styled ? src.replace(/(<style[^>]*>)([\s\S]*?<\/style>)/gi, (_, a, c) => a + dvh(c)) : dvh(src);
-  if (n) fixed.push(`100vh: ${n} now 100dvh`);
-  if (!/-webkit-tap-highlight-color\s*:\s*transparent/.test(styleText(src))) { t = src; src = styled ? src.replace(/<\/style>(?![\s\S]*<\/style>)/i, TAP + "\n</style>") : /<\/head>/i.test(src) ? src.replace(/<\/head>/i, `<style>${TAP}</style>\n</head>`) : /<html/i.test(src) ? src : TAP + "\n" + src; if (src !== t) fixed.push(`tap highlight: ${TAP} added`); }
-  const vp = (src.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0]; t = src;
-  if (/<html/i.test(src) && !/viewport-fit=cover/.test(vp)) src = vp ? src.replace(vp, () => vp.replace(/content=(["'])([^"']*)\1/i, (_, q, v) => `content=${q}${v.replace(/[\s,;]+$/, "")}, viewport-fit=cover${q}`)) : src.replace(/<head(?=[\s>])[^>]*>/i, (h) => `${h}<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n`);
-  if (src !== t) fixed.push(`viewport: viewport-fit=cover added${vp ? "" : " in a new viewport line"}`);
-  if (src !== was) { writeFileSync(file, src); for (const f of fixed) console.log(`FIXED ${f}`); }
+	const fixed = [], was = src, TAP = "html{-webkit-tap-highlight-color:transparent}", styled = /<style/i.test(src);
+	let n = 0, t = src; const dvh = (c) => c.replace(/\b100vh\b/g, () => (n++, "100dvh"));
+	if (/<[a-z!]/i.test(src) && !/<head(?=[\s>])/i.test(src)) { const h = (src.match(/<html(?=[\s>])[^>]*>/i) || [])[0]; src = h ? src.replace(h, (m) => m + "<head></head>") : src.replace(/^(\s*<!doctype[^>]*>\s*)?/i, (d) => (d || "") + "<head></head>\n"); fixed.push(h ? "head: no <head>, added one after <html>" : "head: no <head> or <html>, added <head> at the top"); }
+	src = styled ? src.replace(/(<style[^>]*>)([\s\S]*?<\/style>)/gi, (_, a, c) => a + dvh(c)) : dvh(src);
+	if (n) fixed.push(`100vh: ${n} now 100dvh`);
+	if (!/-webkit-tap-highlight-color\s*:\s*transparent/.test(styleText(src))) { t = src; src = styled ? src.replace(/<\/style>(?![\s\S]*<\/style>)/i, TAP + "\n</style>") : /<\/head>/i.test(src) ? src.replace(/<\/head>/i, `<style>${TAP}</style>\n</head>`) : /<html/i.test(src) ? src : TAP + "\n" + src; if (src !== t) fixed.push(`tap highlight: ${TAP} added`); }
+	const vp = (src.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0]; t = src;
+	if (/<html/i.test(src) && !/viewport-fit=cover/.test(vp)) src = vp ? src.replace(vp, () => vp.replace(/content=(["'])([^"']*)\1/i, (_, q, v) => `content=${q}${v.replace(/[\s,;]+$/, "")}, viewport-fit=cover${q}`)) : src.replace(/<head(?=[\s>])[^>]*>/i, (h) => `${h}<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n`);
+	if (src !== t) fixed.push(`viewport: viewport-fit=cover added${vp ? "" : " in a new viewport line"}`);
+	if (src !== was) { writeFileSync(file, src); for (const f of fixed) console.log(`FIXED ${f}`); }
 }
 // --tokens is accepted for older calls
 const css = styleText(src);
@@ -35,34 +35,34 @@ const finePrint = (sel) => sel.split(",").every((part) => FINE_PRINT.test(part.t
 // Walk blocks with the stack of at-rules around each
 const stack = []; let buf = "";
 for (const ch of css.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@(?:import|charset|namespace)\b(?:"[^"]*"|'[^']*'|\([^)]*\)|[^;"'(])*;/gi, "")) {
-  if (ch === ";" && !stack.length) { buf = ""; continue; }
-  if (ch === "{") { stack.push(buf.trim()); buf = ""; continue; }
-  if (ch === "}") {
-    const sel = stack.pop() ?? ""; const body = buf; buf = "";
-    if (sel.startsWith("@")) continue; // an at-rule prelude, not a selector
-    const media = stack.join(" ");
-    if (/gb-switch/.test(sel)) continue; // the variant switcher is dev chrome
-    if (!/\bprint\b/.test(media)) {
-      let under = "";
-      for (const m of body.matchAll(/(?:^|[;\s])font-size\s*:\s*([^;]+)/g)) { const n = low(m[1].replace(/!important/, "")); if (n !== null && n > 0 && n < 14) under ||= `${sel} { font-size: ${m[1].trim()} }`; }
-      for (const m of body.matchAll(/(?:^|[;\s])font\s*:\s*([^;]+)/g)) { const v = rv(m[1]), n = low((v.match(/([\d.]+(?:px|rem))(?:\s*\/\s*[\w.%]+)?\s+\S/) || [])[1] || ""); if (n !== null && n > 0 && n < 14) under ||= `${sel} { font: ${m[1].trim()} }`; }
-      if (under && !finePrint(sel)) small.push(under);
-    }
-    if (/:hover/.test(sel) && !/hover:\s*hover|prefers-reduced-motion:\s*reduce/.test(media)) add("lint-ungated-hover", "ungated :hover", sel);
-    for (const m of body.matchAll(/(?:^|;)\s*transition(?:-property)?\s*:([^;]+)/g)) {
-      const v = m[1];
-      if (/\ball\b/.test(v) || v.split(",").some((p) => /^\s*[\d.]+m?s/.test(p))) add("lint-transition-all", "transition: all", `${sel} { ${v} }`);
-      if (/(^|[\s,])(width|top|left|right|bottom|inset|margin[\w-]*|padding[\w-]*)\b/.test(v)) add("lint-layout-animated", "layout property animated", `${sel} { ${v} }`);
-      if (/(^|[\s,])((?:max-|min-)?height|grid-template-rows)\b/.test(v)) add("lint-height-animated", "height animated: only an accordion or a leaving row, 200ms", sel, "CHECK");
-      if (/box-shadow/.test(v)) add("lint-shadow-animated", "box-shadow animated (use opacity on a shadow layer or drop-shadow)", sel);
-    }
-    if (!/infinite/.test(body) && !/^:root$|data-direction/.test(sel)) for (const d of body.matchAll(/(?:^|;)\s*(?:transition|animation)(?:-duration)?\s*:([^;]+)/g)) for (const m of d[1].matchAll(/(\d+)ms|([\d.]+)s\b/g)) { const ms = m[1] ? +m[1] : +m[2] * 1000; if (ms > 300) add("lint-slow-motion", `${ms}ms is over 300: only a sheet, toast, hold or once-only moment may`, sel, "CHECK"); }
-    if (rtlPage && /(^|;)\s*(margin|padding)-(left|right)\s*:|(^|;)\s*(left|right)\s*:/.test(body)) add("lint-physical-side", "physical left/right: logical property, or measured on purpose?", sel, "CHECK");
-    if (rtlPage && /transform-origin\s*:\s*[^;]*\b(left|right)\b/.test(body)) add("lint-physical-origin", "physical transform-origin: use --origin-start unless measured", sel, "CHECK");
-    if (rtlPage && /translateX\((?![^)]*var\(--x-dir\))[^)]*\)/.test(body) && !/translateX\(0\)/.test(body)) add("lint-translate-dir", "translateX without --x-dir: does it flip in RTL?", sel, "CHECK");
-    continue;
-  }
-  buf += ch;
+	if (ch === ";" && !stack.length) { buf = ""; continue; }
+	if (ch === "{") { stack.push(buf.trim()); buf = ""; continue; }
+	if (ch === "}") {
+		const sel = stack.pop() ?? ""; const body = buf; buf = "";
+		if (sel.startsWith("@")) continue; // an at-rule prelude, not a selector
+		const media = stack.join(" ");
+		if (/gb-switch/.test(sel)) continue; // the variant switcher is dev chrome
+		if (!/\bprint\b/.test(media)) {
+			let under = "";
+			for (const m of body.matchAll(/(?:^|[;\s])font-size\s*:\s*([^;]+)/g)) { const n = low(m[1].replace(/!important/, "")); if (n !== null && n > 0 && n < 14) under ||= `${sel} { font-size: ${m[1].trim()} }`; }
+			for (const m of body.matchAll(/(?:^|[;\s])font\s*:\s*([^;]+)/g)) { const v = rv(m[1]), n = low((v.match(/([\d.]+(?:px|rem))(?:\s*\/\s*[\w.%]+)?\s+\S/) || [])[1] || ""); if (n !== null && n > 0 && n < 14) under ||= `${sel} { font: ${m[1].trim()} }`; }
+			if (under && !finePrint(sel)) small.push(under);
+		}
+		if (/:hover/.test(sel) && !/hover:\s*hover|prefers-reduced-motion:\s*reduce/.test(media)) add("lint-ungated-hover", "ungated :hover", sel);
+		for (const m of body.matchAll(/(?:^|;)\s*transition(?:-property)?\s*:([^;]+)/g)) {
+			const v = m[1];
+			if (/\ball\b/.test(v) || v.split(",").some((p) => /^\s*[\d.]+m?s/.test(p))) add("lint-transition-all", "transition: all", `${sel} { ${v} }`);
+			if (/(^|[\s,])(width|top|left|right|bottom|inset|margin[\w-]*|padding[\w-]*)\b/.test(v)) add("lint-layout-animated", "layout property animated", `${sel} { ${v} }`);
+			if (/(^|[\s,])((?:max-|min-)?height|grid-template-rows)\b/.test(v)) add("lint-height-animated", "height animated: only an accordion or a leaving row, 200ms", sel, "CHECK");
+			if (/box-shadow/.test(v)) add("lint-shadow-animated", "box-shadow animated (use opacity on a shadow layer or drop-shadow)", sel);
+		}
+		if (!/infinite/.test(body) && !/^:root$|data-direction/.test(sel)) for (const d of body.matchAll(/(?:^|;)\s*(?:transition|animation)(?:-duration)?\s*:([^;]+)/g)) for (const m of d[1].matchAll(/(\d+)ms|([\d.]+)s\b/g)) { const ms = m[1] ? +m[1] : +m[2] * 1000; if (ms > 300) add("lint-slow-motion", `${ms}ms is over 300: only a sheet, toast, hold or once-only moment may`, sel, "CHECK"); }
+		if (rtlPage && /(^|;)\s*(margin|padding)-(left|right)\s*:|(^|;)\s*(left|right)\s*:/.test(body)) add("lint-physical-side", "physical left/right: logical property, or measured on purpose?", sel, "CHECK");
+		if (rtlPage && /transform-origin\s*:\s*[^;]*\b(left|right)\b/.test(body)) add("lint-physical-origin", "physical transform-origin: use --origin-start unless measured", sel, "CHECK");
+		if (rtlPage && /translateX\((?![^)]*var\(--x-dir\))[^)]*\)/.test(body) && !/translateX\(0\)/.test(body)) add("lint-translate-dir", "translateX without --x-dir: does it flip in RTL?", sel, "CHECK");
+		continue;
+	}
+	buf += ch;
 }
 if (small.length) add("lint-small-type", `${small.length} rule(s) set type under 14px: nothing read goes under 14px, body 16px (17px Arabic)`, small.slice(0, 3).join("; ").slice(0, 200), small.length >= 3 ? "FAIL" : "WARN");
 if (/\b100vh\b/.test(css)) add("lint-100vh", "100vh", "use 100dvh (app shell) or 100svh (hero)");
@@ -70,22 +70,22 @@ if (/(transition|animation)\s*:/.test(css) && !/prefers-reduced-motion/.test(css
 if (!/-webkit-tap-highlight-color\s*:\s*transparent/.test(css)) add("lint-tap-highlight", "tap highlight not removed", "html { -webkit-tap-highlight-color: transparent }");
 const vp = (src.match(/<meta[^>]+name=["']viewport["'][^>]*>/i) || [""])[0];
 if (/<html/i.test(src)) {
-  if (!/<head(?=[\s>])/i.test(src)) add("lint-no-head", "no <head>", "the viewport and tap highlight need one; add it after <html>, or run --fix");
-  if (!/viewport-fit=cover/.test(vp)) add("lint-viewport-fit", "viewport", "add viewport-fit=cover");
-  if (/maximum-scale|user-scalable\s*=\s*no/.test(vp)) add("lint-zoom-blocked", "zoom blocked", "remove maximum-scale and user-scalable=no (SC 1.4.4)");
+	if (!/<head(?=[\s>])/i.test(src)) add("lint-no-head", "no <head>", "the viewport and tap highlight need one; add it after <html>, or run --fix");
+	if (!/viewport-fit=cover/.test(vp)) add("lint-viewport-fit", "viewport", "add viewport-fit=cover");
+	if (/maximum-scale|user-scalable\s*=\s*no/.test(vp)) add("lint-zoom-blocked", "zoom blocked", "remove maximum-scale and user-scalable=no (SC 1.4.4)");
 }
 console.log(out.length ? out.join("\n") : "PASS: no motion, phone or type floor findings");
 // One count per rule id, as gb-measure counts its checks
 const rules = [...failRules], lintFails = rules.length;
 if (mi >= 0) {
-  // gb-measure keeps this count while the file is unchanged
-  const p = join(resolve(argv[mi + 1]), "measure.json"); let m = {}; try { m = JSON.parse(readFileSync(p, "utf8")); } catch {}
-  m.lint = { file: resolve(file), mtimeMs: statSync(file).mtimeMs, fails: lintFails, rules, at: new Date().toISOString() };
-  m.lintFails = lintFails; if (m.measure) m.measure.lintFails = lintFails;
-  // Round 8: its FAILs join failIds as lint-<rule>
-  m.failIds = [...new Set([...(m.failIds || []).filter((id) => !id.startsWith("lint-")), ...rules])];
-  // A rough names every open FAIL
-  if (m.measure?.rough) { const open = [...new Set([...(m.failIds || []), ...rules])]; if (open.length) m.measure.openFails = open; else delete m.measure.openFails; } if (m.round1 && m.round === 1 && m.round1.lintFails === undefined) m.round1.lintFails = lintFails;
-  try { mkdirSync(resolve(argv[mi + 1]), { recursive: true }); writeFileSync(p, JSON.stringify(m, null, 1)); console.log(`${lintFails} lint FAIL(s) written to ${p}`); } catch (e) { console.error(`could not write ${p}: ${e.message}`); }
+	// gb-measure keeps this count while the file is unchanged
+	const p = join(resolve(argv[mi + 1]), "measure.json"); let m = {}; try { m = JSON.parse(readFileSync(p, "utf8")); } catch {}
+	m.lint = { file: resolve(file), mtimeMs: statSync(file).mtimeMs, fails: lintFails, rules, at: new Date().toISOString() };
+	m.lintFails = lintFails; if (m.measure) m.measure.lintFails = lintFails;
+	// Round 8: its FAILs join failIds as lint-<rule>
+	m.failIds = [...new Set([...(m.failIds || []).filter((id) => !id.startsWith("lint-")), ...rules])];
+	// A rough names every open FAIL
+	if (m.measure?.rough) { const open = [...new Set([...(m.failIds || []), ...rules])]; if (open.length) m.measure.openFails = open; else delete m.measure.openFails; } if (m.round1 && m.round === 1 && m.round1.lintFails === undefined) m.round1.lintFails = lintFails;
+	try { mkdirSync(resolve(argv[mi + 1]), { recursive: true }); writeFileSync(p, JSON.stringify(m, null, 1)); console.log(`${lintFails} lint FAIL(s) written to ${p}`); } catch (e) { console.error(`could not write ${p}: ${e.message}`); }
 }
 process.exit(lintFails ? 1 : 0);

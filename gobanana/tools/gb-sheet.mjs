@@ -1,4 +1,4 @@
-// gb-tools v8: bump it in every script and the fetch line on any change.
+// gb-tools v9: the core fetch line's tag.
 // gb-sheet: sketches (or one view) as one labelled contact sheet for a crit.
 //   node gb-sheet.mjs <a.html[?query]> [b.html ...] [--size 1440x900] [--scale 1] [--out <dir>] [--name sheet] [--jpeg]
 import { guard } from './gb-guard.mjs';
@@ -31,32 +31,32 @@ if (files.length === 1 && nameOpt) labels = [clean(nameOpt)];
 const browser = guard(await pw.chromium.launch().catch(cannot)), shots = [], failed = [];
 try { rmSync(noRender, { force: true }); } catch {}
 for (const [i, f] of files.entries()) {
-  const u = href(f), label = labels[i];
-  if (u.protocol === 'file:' && !existsSync(fileURLToPath(u))) { failed.push(f); console.error(`FAIL ${f}: no such file`); continue; }
-  const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: scale });
-  const errs = []; page.on('pageerror', (e) => errs.push(String(e.message).split('\n')[0]));
-  let bad = null;
-  try { const r = await page.goto(u.href, { waitUntil: 'networkidle' }); if (/^https?:$/.test(u.protocol) && (!r || !r.ok())) bad = `HTTP ${r ? r.status() : 'no response'}`; } catch (e) { bad = String(e.message).split('\n')[0]; }
-  if (bad) { failed.push(f); console.error(`FAIL ${f}: ${bad}`); await page.close(); continue; }
-  await page.evaluate(() => document.fonts?.ready).catch(() => {}); await page.waitForTimeout(400);
-  const file = join(out, label + '.png'); await page.screenshot({ path: file }); await page.close();
-  shots.push({ label, file }); console.log(`${file}${errs.length ? '  page errors: ' + errs.join(' | ') : ''}`);
+	const u = href(f), label = labels[i];
+	if (u.protocol === 'file:' && !existsSync(fileURLToPath(u))) { failed.push(f); console.error(`FAIL ${f}: no such file`); continue; }
+	const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: scale });
+	const errs = []; page.on('pageerror', (e) => errs.push(String(e.message).split('\n')[0]));
+	let bad = null;
+	try { const r = await page.goto(u.href, { waitUntil: 'networkidle' }); if (/^https?:$/.test(u.protocol) && (!r || !r.ok())) bad = `HTTP ${r ? r.status() : 'no response'}`; } catch (e) { bad = String(e.message).split('\n')[0]; }
+	if (bad) { failed.push(f); console.error(`FAIL ${f}: ${bad}`); await page.close(); continue; }
+	await page.evaluate(() => document.fonts?.ready).catch(() => {}); await page.waitForTimeout(400);
+	const file = join(out, label + '.png'); await page.screenshot({ path: file }); await page.close();
+	shots.push({ label, file }); console.log(`${file}${errs.length ? '  page errors: ' + errs.join(' | ') : ''}`);
 }
 if (jpeg && shots.length) {
-  // Each shot at 1x, JPEG 0.9
-  const page = await browser.newPage({ viewport: { width: 400, height: 300 } });
-  for (const s of shots) {
-    const url = await page.evaluate(async ({ src, w, h }) => { const img = new Image(); img.src = src; await img.decode(); const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, w, h); return c.toDataURL('image/jpeg', 0.9); }, { src: `data:image/png;base64,${readFileSync(s.file).toString('base64')}`, w, h });
-    const file = s.file.replace(/\.png$/, '.jpg'); writeFileSync(file, Buffer.from(url.split(',')[1], 'base64')); console.log(file);
-  }
-  await page.close();
+	// Each shot at 1x, JPEG 0.9
+	const page = await browser.newPage({ viewport: { width: 400, height: 300 } });
+	for (const s of shots) {
+		const url = await page.evaluate(async ({ src, w, h }) => { const img = new Image(); img.src = src; await img.decode(); const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, w, h); return c.toDataURL('image/jpeg', 0.9); }, { src: `data:image/png;base64,${readFileSync(s.file).toString('base64')}`, w, h });
+		const file = s.file.replace(/\.png$/, '.jpg'); writeFileSync(file, Buffer.from(url.split(',')[1], 'base64')); console.log(file);
+	}
+	await page.close();
 }
 if (shots.length > 1) {
-  const cols = shots.length <= 4 ? 2 : 3, tw = 720, th = Math.round(tw * h / w);
-  const cells = shots.map((s) => `<figure><img src="data:image/png;base64,${readFileSync(s.file).toString('base64')}"><figcaption>${s.label}</figcaption></figure>`).join('');
-  const page = await browser.newPage({ viewport: { width: cols * (tw + 32) + 32, height: 400 } });
-  await page.setContent(`<style>body{margin:0;padding:32px;background:#d9dadc;font:600 18px/1 system-ui,sans-serif;display:grid;grid-template-columns:repeat(${cols},${tw}px);gap:32px}figure{margin:0}img{width:${tw}px;height:${th}px;display:block;border-radius:6px;box-shadow:0 2px 12px #0002}figcaption{margin-top:10px;color:#222}</style>${cells}`);
-  const file = join(out, name + '.png'); await page.screenshot({ path: file, fullPage: true }); console.log('sheet: ' + file);
+	const cols = shots.length <= 4 ? 2 : 3, tw = 720, th = Math.round(tw * h / w);
+	const cells = shots.map((s) => `<figure><img src="data:image/png;base64,${readFileSync(s.file).toString('base64')}"><figcaption>${s.label}</figcaption></figure>`).join('');
+	const page = await browser.newPage({ viewport: { width: cols * (tw + 32) + 32, height: 400 } });
+	await page.setContent(`<style>body{margin:0;padding:32px;background:#d9dadc;font:600 18px/1 system-ui,sans-serif;display:grid;grid-template-columns:repeat(${cols},${tw}px);gap:32px}figure{margin:0}img{width:${tw}px;height:${th}px;display:block;border-radius:6px;box-shadow:0 2px 12px #0002}figcaption{margin-top:10px;color:#222}</style>${cells}`);
+	const file = join(out, name + '.png'); await page.screenshot({ path: file, fullPage: true }); console.log('sheet: ' + file);
 }
 await browser.close();
 if (failed.length) { console.error(`${failed.length} of ${files.length} page(s) did not load: ${failed.join(', ')}`); process.exit(1); }

@@ -1,4 +1,4 @@
-// gb-tools v8: bump it in every script and the fetch line on any change.
+// gb-tools v9: the core fetch line's tag.
 // gb-guard: a page the render scripts open loads file:// only inside the working folder, $TMPDIR or /tmp.
 import { realpathSync } from 'node:fs'; import { tmpdir } from 'node:os'; import { sep } from 'node:path'; import { fileURLToPath } from 'node:url';
 const real = (p) => { try { return realpathSync(p); } catch { return ''; } };
