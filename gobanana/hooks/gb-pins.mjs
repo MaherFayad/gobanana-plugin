@@ -7,6 +7,7 @@ export const PINS = {
     "gb-fidelity.mjs": "e9abb881b83f4a8737a10437c70262cf05355d3b8c544543640b4f22d6edb714",
     "gb-frames.mjs": "21837e59cdc8d0006d63f2e00613e9816fa858ed1a144eb3cd175b193dcf8c57",
     "gb-guard.mjs": "c18ad5bfbfac33bf1e47aebd95fce545debfcf82cc132f28c81c230448c78b44",
+    "gb-inventory.mjs": "e1a7d2001222e21c9255f858bf3fdd5d91f3abb4d6b32cd2ebc76e680e5a4b56",
     "gb-lint.mjs": "3a56e3cf7752b1fbc3304ae10f20fe13e902a048749c884926ec48557ce290bb",
     "gb-measure.mjs": "c954dd719fdc5318bc02cd6989e8257b0b839be19f22edc4634d838a9b23a657",
     "gb-probe.mjs": "15d4a0c81080da3e3ffdf5d1bafd852952134e91b6e5155cd033fd829ad84621",

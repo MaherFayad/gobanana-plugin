@@ -6,9 +6,9 @@ GoBanana is a Claude plugin for one crazy idea over a page or two: a launch page
 
 Ask your agent to "go wild" on a page. GoBanana bends the brief into unexpected directions, each with a full visual spec, fills a moodboard canvas with two zones of linked references (the wild idea as images, and real UI for your platform), and hands the direction you keep to Claude Code, Cursor, Copilot, Codex, v0 or Lovable as scoped files. Then it can screenshot what you built and grade it against the direction.
 
-The plugin connects your agent to the GoBanana MCP server and adds 12 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
+The plugin connects your agent to the GoBanana MCP server and adds 13 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
 
-> Status: v0.8.4, beta. The server runs at `https://gobanana.fun`.
+> Status: v0.9.0, beta. The server runs at `https://gobanana.fun`.
 
 ## Install
 
@@ -63,6 +63,16 @@ The steps below are the Spark door; the Concept door runs the same engine with t
 7. **Rough screens, then the pick.** (Spark door: only when you ask.) A rough first screen of every direction, each in its hero's look, goes on the board side by side, so you pick from what you can see. The pick becomes one finished, checked page (gobanana-draft), or the agent researches, specs and builds the feature properly in Claude Code (gobanana-finish). Every run ends with the canvas link.
 8. **Hand off.** Scoped files for your coding tools, under `design/explorations/<slug>/` ([Hand off](https://gobanana.fun/docs/guides/handoff/)). Frankenstein it, palette and critique are there when you want them.
 
+## Rescue an existing app
+
+Say "GoBanana, our app looks bad" and `gobanana-rescue` starts from the app you already have, not a blank page.
+
+1. **Audit.** It asks only where the app runs, which 1 to 3 screens matter and a demo login if needed. It screenshots those screens (demo, staging or seed data only, never real customer data), measures the accessibility floor, runs `gb-inventory` (counts the colors, font sizes, spacings and radii the app really uses, finds near duplicates, proposes a tidy set and gives a consistency score 0 to 100), and reviews hierarchy, the main action, empty and error states, copy and navigation. The result is `design/gobanana/rescue/AUDIT.md` with a score per screen and the top 5 problems ranked by business impact, and your current screens on the board in a "Before" section.
+2. **Pick a track.** Clean-up keeps the layout and applies a tidy token set built from what the app already uses, with the floor fixed, one page at a time. Re-imagine hands one screen to the Concept or Spark door, with its before shot as the baseline and what must stay read from the current screen.
+3. **Roll out safely.** A throwaway git branch, one screen at a time, before and after side by side on the board, measured again, and the canvas link at the end. The product theme changes only on your explicit yes.
+
+`gb-inventory` is a check script like the others: it runs on your machine with Node and Playwright, calls no AI and opens only the pages you name.
+
 ## Skills
 
 | Skill | Say something like | What happens |
@@ -79,6 +89,7 @@ The steps below are the Spark door; the Concept door runs the same engine with t
 | `gobanana-frankenstein` | "frankenstein it", "nav from this, hero from that", "make new layouts from my board" | Cuts parts out of the board's UI references (role, crop, light or dark, steal note), stitches 3 or 4 page variants from a recipe, reviews and fixes them, remixes with a lock, exports FRANKENSTEIN.md |
 | `gobanana-build` | "build this Frankenstein page", "code this screen from the parts" | Turns the page's rows into a region plan, takes the look from the direction's hero and tokens, renders in one language, grades side by side against the hero, fixes, then asks for your reaction |
 | `gobanana-critique` | "critique the build", "does this match the direction" | Screenshots at platform sizes, grades the REVIEW.md checklist with evidence, top 3 fixes inside page scope |
+| `gobanana-rescue` | "GoBanana, our app looks bad", "audit my UI", "glow up our app" | Audits an app that is already live: screenshots, measured fixes, a style inventory (`gb-inventory`), a UX review and a scored AUDIT.md, with the current screens on the board as "Before"; then a clean-up (same layout, tidy tokens) or a re-imagine of one screen, rolled out one screen at a time on a throwaway branch |
 
 ### Platforms
 
