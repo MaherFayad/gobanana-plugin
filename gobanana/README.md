@@ -8,7 +8,7 @@ Ask your agent to "go wild" on a page. GoBanana bends the brief into unexpected 
 
 The plugin connects your agent to the GoBanana MCP server and adds 12 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
 
-> Status: v0.4.0, beta. The server runs at `https://gobanana.fun`.
+> Status: v0.8.4, beta. The server runs at `https://gobanana.fun`.
 
 ## Install
 
@@ -41,22 +41,33 @@ claude.ai serves its own copy of an organization plugin; it does not follow this
 
 You can tell when a copy is behind: every skill calls the GoBanana `ping` tool once, and when the server's `minPlugin` is newer than the plugin's version, the agent tells you in one line to update.
 
+## Two doors
+
+GoBanana works out who is asking from your first message, never with a quiz, and saves it as `Who:` in `design/gobanana/CONTEXT.md`. Its first line names the door and how to switch.
+
+- **Concept door (you are not a designer).** Business questions only: what it is and who it is for, what the person on the page should do, what must stay. You pick a look from 9 pictures (`pick_taste`) instead of describing one. You get 3 concepts explained in plain words (the idea, why it fits your goal, the risk), a rough screen of each, and a finished draft only after you pick. Say "I'm a designer" for more control.
+- **Spark door (you design).** The full intake with design words, wildness 1 to 5, up to 8 directions (6 by default), the rut shown as a short list, a choice of hero per direction, "lock 2 and 5" to keep those, drop the others from the board and re-bend them, and no rough screens unless you ask. `pick_taste` is offered, never forced. Say "I'm new to design" for plain questions.
+
+You use the Spark door when your message uses design words (Figma, references, components, type scale, grid, moodboard, wildness), when you have a Mobbin connector, or when you say you design. Otherwise you get the Concept door. "Just go" works on both: no questions, and the agent tells you what it assumed.
+
 ## The flow
+
+The steps below are the Spark door; the Concept door runs the same engine with the plain-word changes above.
 
 1. **One short intake.** The agent reads `design/gobanana/CONTEXT.md` and asks only what is missing, in one stop: how far to go (Explore, Explore then draft, Finished, Just references), your style words ranked, who it is for and the market, the business goal with its number, what must stay on the page, and the one language (English unless you ask for another). The answers are saved to `design/gobanana/CONTEXT.md` and reused next time. Say "just go" and it fills the gaps itself and tells you what it assumed. If it is unclear what to design, the same stop asks once (or, under "just go", says which reading it took). If you name the whole product, it asks "Where should the weirdness go?" ([Where weirdness pays](https://gobanana.fun/docs/guides/where-weirdness-pays/)).
 2. **Sweep and name the rut.** One wide search maps what the category already does, so no direction lands in it.
-3. **Bend into strategies.** The agent writes 7 to 8 fresh ideas, never one used on your recent boards; the server bends the strongest into 4 directions (or the number you ask for, up to 8). Each is a different way to get the job done that keeps everything you said must stay, with a working mechanic and its own skeleton. One is the subtract direction: the same job with less.
-4. **See every result.** The agent looks at every reference image before it keeps one, keeps 5 to 8 per direction with a "steal:" note, and picks each direction's hero (the reference whose structure and look the draft rebuilds, never its wordmark, logo, copy, illustrations, photos or brand marks) plus 2 to 3 section or component references. Your style words choose the heroes, and every hero looks clearly different.
+3. **Bend into strategies.** The agent writes `count` plus 3 fresh ideas (at least 5, at most 10), never one used on your recent boards; the server bends the strongest into the number of directions you ask for (up to 8; 6 by default, 3 on the Concept door). Each is a different way to get the job done that keeps everything you said must stay, with a working mechanic and its own skeleton. One is the subtract direction: the same job with less.
+4. **See every result.** The agent looks at every reference image before it keeps one, keeps 5 to 8 per direction with a "steal:" note, and picks each direction's hero (the reference whose structure and look the draft rebuilds, never its wordmark, logo, copy, illustrations, photos or brand marks) plus 2 to 3 section or component references. Your style words, or the looks you picked, choose the heroes, and every hero looks clearly different.
 5. **Shipped vs next.** If you have a Mobbin connector, real shipped screens that fit each direction go on the board with a "Shipped today" note. The board shows them straight from Mobbin; nothing is downloaded.
 6. **Board.** A Space section (what the category does) and one section per direction, clustered by what to take (layout, components, type, color, motion, art), each tile with its source link.
-7. **Rough screens, then the pick.** A rough first screen of every direction, each in its hero's look, goes on the board side by side, so you pick from what you can see. The pick becomes one finished, checked page (gobanana-draft), or the agent researches, specs and builds the feature properly in Claude Code (gobanana-finish). Every run ends with the canvas link.
+7. **Rough screens, then the pick.** (Spark door: only when you ask.) A rough first screen of every direction, each in its hero's look, goes on the board side by side, so you pick from what you can see. The pick becomes one finished, checked page (gobanana-draft), or the agent researches, specs and builds the feature properly in Claude Code (gobanana-finish). Every run ends with the canvas link.
 8. **Hand off.** Scoped files for your coding tools, under `design/explorations/<slug>/` ([Hand off](https://gobanana.fun/docs/guides/handoff/)). Frankenstein it, palette and critique are there when you want them.
 
 ## Skills
 
 | Skill | Say something like | What happens |
 | --- | --- | --- |
-| `gobanana-explore` | "go wild on our launch page", "crazy ideas for onboarding", "help me design the checkout" | One intake stop saved to CONTEXT.md, a sweep that names the rut, 4 directions (or your count) that are different strategies, every reference seen before it is kept, a hero per direction, Mobbin screens when connected, a clustered board, a rough screen of every direction and compact cards |
+| `gobanana-explore` | "go wild on our launch page", "crazy ideas for onboarding", "help me design the checkout" | One intake stop saved to CONTEXT.md, a sweep that names the rut, 3 concepts or up to 8 directions (your count) that are different strategies, every reference seen before it is kept, a hero per direction, Mobbin screens when connected, a clustered board, a rough screen of every direction (Concept door, or when you ask) and compact cards |
 | `gobanana-finish` | "build it properly", "end to end", "production ready" | The intake, then problem, space, spec and wireframes for your OK, 4 directions with rough screens to pick from, one screen first for your reaction, then the code, reviewed beside the hero |
 | `gobanana-draft` | "draft these", "draft my pick" | The pick's rough grown into the whole page in its hero's look, in one language: a look sheet and steal map, real content and pictures, rendered and measured, two critique passes beside the hero, then placed on the board beside its direction |
 | `gobanana-moodboard` | "make a moodboard", "arrange this", "put it in FigJam" | Sections per direction, art row above UI grid, steal notes, clean layout; optionally FigJam or an HTML board |
@@ -93,11 +104,14 @@ From 3 up, a direction can own the whole page layout. Work screens (dashboards, 
 
 ### MCP tools
 
-`ping`, `get_playbook`, `bend_brief`, `search_references`, `rate_references`, `rate_directions`, `extract_palette`, `new_canvas`, `open_canvas`, `add_to_canvas`, `arrange_canvas`, `get_canvas`, `delete_canvas`, `export_kit`, `cut_parts`, `frankenstein_page`, `remix_frankenstein`, `update_frankenstein`, `get_snapshot`, `place_kept`, `reconcile_direction`.
+`ping`, `get_playbook`, `pick_taste`, `bend_brief`, `search_references`, `rate_references`, `rate_directions`, `new_canvas`, `open_canvas`, `add_to_canvas`, `get_upload_link`, `place_kept`, `arrange_canvas`, `get_canvas`, `get_snapshot`, `cut_parts`, `frankenstein_page`, `remix_frankenstein`, `update_frankenstein`, `extract_palette`, `reconcile_direction`, `export_kit`, `delete_canvas`, `send_feedback`.
 
 - `ping` checks the connection and names the oldest plugin version the server supports (`minPlugin`).
 - `get_playbook` returns the playbook for a skill, a step or a subagent by name (for example `gobanana-explore` or `gobanana-explore/intake`). Every skill and subagent calls it first.
 
+- `pick_taste` shows up to 9 curated screens (different looks, light and dark both) from the reference index so you can choose a look by pointing; with a board they go in a "Pick your look" section. Tell the agent the numbers you liked and disliked; it passes the matching ids and gets back ranked style words, ground, mood, density and any clashes, which the agent uses as your taste. It uses no AI and no search quota, and stores no images.
+- `get_upload_link` returns a short-lived upload link for one screenshot of your own draft, so a draft can go on the board; the image is your own build, never a reference.
+- `send_feedback` sends your rating (love, ok or miss) with optional reasons, only when you give feedback; your own words and the board are sent only when you ask.
 - `bend_brief` takes `platform` and up to 3 `pages`, and returns `wildSpots` when no pages are given.
 - `search_references` returns two zones, `ui` and `art`. Sources: UI galleries by platform, plus Pinterest, Dribbble, Behance and Awwwards. At most 2 results per studio, newer work first, UI kits dropped.
   - Website galleries: Lapa Ninja, Siteinspire, CSS Design Awards, landing.love, Unsection, Supahero, The FWA, Httpster, Dark Design.
