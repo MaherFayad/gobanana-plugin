@@ -1,11 +1,11 @@
 ---
 name: gobanana-draft
-description: Finish a picked GoBanana direction into one page or screen of any type (landing, app, dashboard, canvas tool, checkout, email or slide) in two steps, a pixel perfect copy of the direction's hero reference, then the business applied to it (the product's content, must-keeps, idea, own wordmark and pictures, nothing moved), one language (English unless asked), measured once, placed on the board and shown before more. Use only when the user names GoBanana, says "go wild", or continues a GoBanana board or flow (a gobanana.fun link), for example "finish the pick", "draft 2 and 5" after GoBanana directions, "draft this GoBanana direction", an answer to "Which one should I finish?", "apply this direction to our checkout" or "show me versions" of a GoBanana draft. Never for a plain mockup or design ask without GoBanana. Runs get_canvas, reconcile_direction, get_snapshot and add_to_canvas. Use gobanana-explore when there are no directions yet.
+description: Finish a picked GoBanana direction into one page or screen of any type (landing, app, dashboard, canvas tool, checkout, email or slide) in two steps, a pixel perfect copy of the direction's hero reference, then the business applied to it (the product's content, must-keeps, idea, own wordmark and pictures, nothing moved), one language (English unless asked), measured once, every pick built in the same pass, placed on the board and shown in the chat. Use only when the user names GoBanana, says "go wild", or continues a GoBanana board or flow (a gobanana.fun link), for example "finish the pick", "draft 2 and 5" after GoBanana directions, "draft this GoBanana direction", an answer to "Which one should I finish?", "apply this direction to our checkout" or "show me versions" of a GoBanana draft. Never for a plain mockup or design ask without GoBanana. Runs get_canvas, reconcile_direction, get_snapshot and add_to_canvas. Use gobanana-explore when there are no directions yet.
 ---
 
 # GoBanana draft
 
-Plugin 0.9.0. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.9.0, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.9.1. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.9.1, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
@@ -17,4 +17,4 @@ These hold even if get_playbook fails:
 6. Must-keeps stay. Taste only as given or confirmed. The user's named output wins.
 7. Place each draft (add_to_canvas type "build" with measure, fidelity, refsUsed); end with the canvas web link.
 
-Call get_playbook with name `gobanana-draft` and plugin `0.9.0`, and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-draft` and plugin `0.9.1`, and follow it exactly; batch the playbooks it names in `more`.
