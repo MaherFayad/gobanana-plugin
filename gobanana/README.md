@@ -8,7 +8,7 @@ Ask your agent to "go wild" on a page. GoBanana bends the brief into unexpected 
 
 The plugin connects your agent to the GoBanana MCP server and adds 13 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
 
-> Status: v0.9.1, beta. The server runs at `https://gobanana.fun`.
+> Status: v0.9.2, beta. The server runs at `https://gobanana.fun`.
 
 ## Install
 
@@ -180,7 +180,7 @@ Nothing is cut out of an image file. A part is a rectangle the browser shows ove
 
 ## Hard rules on images and sources
 
-- **GoBanana never downloads, stores or re-hosts reference images.** It keeps URLs and metadata only. Images load in your browser from their source.
+- **GoBanana never downloads, stores or re-hosts reference images.** It keeps URLs and metadata only. Images load in your browser from their source. Where the chat cannot show the look picker (Cowork), your agent makes one numbered picture of the 9 looks on your machine to show you; it is never uploaded or saved to your project.
 - **Every reference shows its source link**: on the canvas, in share links, in every export, and in every skill reply.
 - **Parts are crops in the browser, not files.** Frankenstein it never cuts or saves pieces of a reference; the crop is a rectangle over the hotlinked image.
 - **Never copy reference images into your repo.** The skills will not do it, and the files they write tell coding agents not to either.

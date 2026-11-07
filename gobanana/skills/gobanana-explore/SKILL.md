@@ -5,15 +5,15 @@ description: Explore design directions for a page or screen (landing page, app s
 
 # GoBanana explore
 
-Plugin 0.9.1. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.9.1, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.9.2. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.9.2, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
-1. Show each reference's source link. Never upload or re-host reference images; download one only to copy it locally in a draft's step 1.
-2. Never delete a canvas without the user's explicit yes. Relay quota messages once. Never retry in a loop.
+1. Show each reference's source link. Never upload or re-host reference images; download one only to copy it locally in a draft's step 1, or for the playbook's look sheet.
+2. Never delete a canvas without the user's explicit yes. Relay quota once. Never retry in a loop.
 3. Run the intake stop (read `design/gobanana/CONTEXT.md`) before `bend_brief`; in a subagent ask nothing (`context.assumed`). Unclear? Ask once. New board unless named.
-4. Directions: the user's count, else 3 (non-designer), 6 (designer), each a different structure and strategy keeping every must-keep, its curated hero.
-5. Never reuse a `recentIdeas` idea. Saved taste only after a yes; no dark default.
-6. End with the canvas web link and, for non-designers or on request, rough screens.
+4. Directions: the user's count, else 3 (non-designer), 6 (designer), each a different structure keeping every must-keep, its curated hero.
+5. Never reuse `recentIdeas`. Saved taste only after a yes; no dark default.
+6. End with rough screens (non-designers, or on request) and the canvas web link.
 
-Call get_playbook with name `gobanana-explore` and plugin `0.9.1`, and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-explore` and plugin `0.9.2`, and follow it exactly; batch the playbooks it names in `more`.
