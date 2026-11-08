@@ -1,4 +1,4 @@
-// gb-tools v10: the core fetch line's tag.
+// gb-tools v11: the core fetch line's tag.
 // gb-spread: are these concepts really different? Where text, panels and media sit on each first screen.
 //   node gb-spread.mjs <a.html|url> <b.html|url> [more] [--lang en] [--w 1440 --h 900] [--max 0.7] [--json]
 import { guard } from './gb-guard.mjs';

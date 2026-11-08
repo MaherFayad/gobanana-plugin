@@ -1,4 +1,4 @@
-// gb-tools v10: the core fetch line's tag.
+// gb-tools v11: the core fetch line's tag.
 // gb-lint: motion, phone and 14px floor checks. node gb-lint.mjs <file.html> [--fix] [--measure-dir <dir>] (lint-<rule> ids into measure.json)
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"; import { join, resolve } from "node:path";
 const argv = process.argv.slice(2), ti = argv.indexOf("--tokens"), mi = argv.indexOf("--measure-dir"), file = argv.find((a, i) => !a.startsWith("--") && (ti < 0 || i !== ti + 1) && (mi < 0 || i !== mi + 1));

@@ -1,7 +1,6 @@
-// gb-tools v10: the core fetch line's tag.
+// gb-tools v11: the core fetch line's tag.
 // gb-measure: a draft's accessibility floor and content honesty at the brief's viewports, FAIL and WARN.
-//   node gb-measure.mjs <file.html|url> [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--subject words] [--json]
-//   node gb-measure.mjs --rough <out-dir> a.html b.html ...   floor checks only
+//   node gb-measure.mjs <file.html|url> [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--subject words|none] [--json]
 // Flags and checks: measure-script. No style budgets, the look is the hero's.
 // Adapted from taste-skill scripts/inspect.mjs and scripts/lib/rules.mjs (MIT, github.com/Leonxlnx/taste-skill).
 import { guard } from './gb-guard.mjs';
@@ -12,13 +11,13 @@ const args = process.argv.slice(2);
 const opt = (n) => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; };
 const flag = (n) => { const i = args.indexOf('--' + n); if (i < 0) return false; args.splice(i, 1); return true; };
 const tp = opt('tokens'), tokens = tp ? JSON.parse(readFileSync(tp, 'utf8')) : null, subject = String(opt('subject') ?? [tokens?.subject ?? ''].flat().join(', ')).trim().slice(0, 60);
-const urlFor = { ar: opt('ar'), en: opt('en') }, outDir = opt('out'), list = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const urlFor = { ar: opt('ar'), en: opt('en') }, outDir = opt('out'), noSlot = /^none$/i.test(subject), list = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const langArg = list(opt('languages')), tokenLangs = Array.isArray(tokens?.languages) ? list(tokens.languages.join(',')) : [];
 const langGiven = langArg.length > 0 || !!tokens?.primaryLanguage || tokenLangs.length > 0;
 let languages = [...new Set(langArg.length ? langArg : [String(tokens?.primaryLanguage || tokenLangs[0] || 'en').toLowerCase()])];
 const ta = []; for (let v; (v = opt('taste-allows')) !== null;) ta.push(v);
 const allow = [...list(ta.join(',')), ...(Array.isArray(tokens?.tasteAllows) ? tokens.tasteAllows.map(String) : [])];
-flag('work'); flag('phone'); const asJson = flag('json'); // --work and --phone are accepted and ignored: no budgets.
+flag('work'); flag('phone'); const asJson = flag('json');
 const landing = flag('landing') || tokens?.landing === true;
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 const roughDir = opt('rough'), rough = roughDir !== null, vpArg = []; for (let v; (v = opt('viewport')) !== null;) vpArg.push(v);
@@ -35,7 +34,7 @@ const req = createRequire(import.meta.url), gbDir = join(process.env.TMPDIR || '
 const cannot = (e) => { try { mkdirSync(gbDir, { recursive: true }); writeFileSync(noRender, `${new Date().toISOString()} ${String(e?.message || e).split('\n')[0]}\n`); } catch {} console.error(`This machine cannot render: ${String(e?.message || e).split('\n')[0]}\nMarked ${noRender}. Show the draft only with every visual item "not checked".`); process.exit(3); };
 let pw; try { try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); } } catch (e) { cannot(e); }
 
-function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 1440, subject = '' }) {
+function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 1440, subject = '', noSlot = false }) {
 	const gcs = (e, p) => getComputedStyle(e, p), bcr = (e) => e.getBoundingClientRect(), qsa = (q) => document.body.querySelectorAll(q), qda = (q) => document.querySelectorAll(q);
 	const W = innerWidth, H = innerHeight, mobile = W < 640, out = [], add = (level, id, msg) => out.push({ level, id, msg });
 	const html = document.documentElement, ar = /^ar/.test(html.lang), rtl = gcs(html).direction === 'rtl';
@@ -349,7 +348,7 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	const ph = [...phBox.filter((e) => !phBox.some((o) => o !== e && o.contains(e))).map((e) => [e, 'a flat colour box']), ...phImg.map((e) => [e, e.complete && !e.naturalWidth ? 'an image that did not load' : 'a placeholder image service'])];
 	if (ph.length) add('FAIL', 'placeholder-media', `${ph.length} placeholder picture(s): ${ph.slice(0, 3).map(([e, why]) => { const r = bcr(e); return `${sel(e)} ${Math.round(r.width)}x${Math.round(r.height)} (${why})`; }).join(', ')}; show the real picture (the pictures ladder in gobanana-draft/pictures), draw the thing with type and shapes, or cut the box (a drawn shape on purpose: data-shape)`);
 	const picOk = (e) => { const r = bcr(e); return r.width >= 64 && r.height >= 64 && r.width * r.height >= 9000 && vis(e) && opac(e) >= 0.1 && !e.closest('.gb-switch,[data-viz]'); };
-	if ((subject || qsa('input:not([type=hidden]),select,textarea,[role=switch]').length < 2) && ![...qsa('img,video,canvas,svg,[data-sample-image]')].some((e) => picOk(e) && !(e instanceof SVGElement && e.ownerSVGElement) && (e.localName !== 'img' || e.naturalWidth > 0) && (e.localName !== 'svg' || e.querySelectorAll('path,circle,ellipse,polygon,rect,image').length >= 2)) && ![...qsa('*')].some((e) => /url\(/.test(gcs(e).backgroundImage) && picOk(e))) add('WARN', 'no-picture', `no picture of the subject${subject ? ` (${subject})` : ''} on the page: no image, illustration or background picture of 64px or more; show it (playbook gobanana-draft/pictures)`);
+	if (!noSlot && (subject || qsa('input:not([type=hidden]),select,textarea,[role=switch]').length < 2) && ![...qsa('img,video,canvas,svg,[data-sample-image]')].some((e) => picOk(e) && !(e instanceof SVGElement && e.ownerSVGElement) && (e.localName !== 'img' || e.naturalWidth > 0) && (e.localName !== 'svg' || e.querySelector('use') || e.querySelectorAll('path,circle,ellipse,polygon,rect,image').length >= 2)) && ![...qsa('*')].some((e) => /url\(/.test(gcs(e).backgroundImage) && picOk(e))) add('WARN', 'no-picture', `no picture of the subject${subject ? ` (${subject})` : ''} on the page: no image, illustration or background picture of 96px square or more (64px a side, 9,000 square px in all); show it (playbook gobanana-draft/pictures)`);
 	if (ar && /[\u064B-\u065F\u0670]/.test(txt)) add('FAIL', 'ar-diacritics', 'Arabic diacritics on the page');
 	if (ar && /[\u0660-\u0669\u06F0-\u06F9]/.test(txt)) add('FAIL', 'eastern-digits', 'Eastern Arabic digits; use Western digits 0 to 9');
 	if (ar && /[\u0600-\u06FF] ?, ?[\u0600-\u06FF]/.test(txt)) add('WARN', 'ar-comma', 'Latin comma between Arabic words; use the Arabic comma');
@@ -424,7 +423,7 @@ async function measureRun(r, src) {
 	const u = pageUrl(urlFor[r.lang] || src); if (r.lang && !urlFor[r.lang]) u.searchParams.set('lang', r.lang); if (r.state) u.searchParams.set('state', r.state);
 	const wait = r.rough ? 800 : 1500;
 	await page.goto(u.href, { waitUntil: 'load' }); await settle(page, wait);
-	const res = await page.evaluate(MEASURE, { want: r.lang, allow, landing, main: r.w === mainW && !r.rough, subject });
+	const res = await page.evaluate(MEASURE, { want: r.lang, allow, landing, main: r.w === mainW && !r.rough, subject, noSlot });
 	if (r.state) { res.findings = res.findings.filter((f) => LAYOUT.includes(f.id)); res.ground = []; }
 	const kinds = r.rough ? [] : await page.$$eval('[data-mechanic]', (es) => es.map((e) => [e.dataset.mechanic.trim().toLowerCase()]));
 	if (!r.reduce && !r.state && !allow.includes('mechanic-still')) for (const [i, [kind]] of kinds.entries()) {

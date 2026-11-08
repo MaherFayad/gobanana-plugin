@@ -1,4 +1,4 @@
-// gb-tools v10: the core fetch line's tag.
+// gb-tools v11: the core fetch line's tag.
 // node gb-probe.mjs <url> <outdir>: each keyboard stop at 390 (ring, label, covered) and page.under44 (tap targets)
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { join } from 'node:path';

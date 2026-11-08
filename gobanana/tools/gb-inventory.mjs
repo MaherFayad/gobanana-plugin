@@ -1,4 +1,4 @@
-// gb-tools v10: the core fetch line's tag.
+// gb-tools v11: the core fetch line's tag.
 // gb-inventory: how many colours, sizes, spacings and radii a live page really uses, which are near duplicates, and a tidy set made only from them. Computed styles only, no AI.
 //   node gb-inventory.mjs <url|file.html> [more] [--viewport 390x844] [--out dir] [--json]
 //   Writes <out>/inventory.json and inventory.md (default out: $TMPDIR/gb/inventory). Exit 0 done, 1 a page did not load, 2 usage, 3 this machine cannot render.

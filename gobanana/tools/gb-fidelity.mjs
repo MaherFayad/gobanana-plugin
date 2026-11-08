@@ -1,4 +1,4 @@
-// gb-tools v10: the core fetch line's tag.
+// gb-tools v11: the core fetch line's tag.
 // gb-fidelity: a draft against its hero, pixels and the DOM only, no AI; the hero and refs are read in memory
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -41,11 +41,11 @@ export function findScreen(img) {
 	for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const p = at(x, y); if (y < t) sides[0].push(p); if (y >= h - t) sides[1].push(p); if (x < t) sides[2].push(p); if (x >= w - t) sides[3].push(p); }
 	const ring = sides.flat(), med = [0, 1, 2].map((c) => ring.map((p) => p[c]).sort((a, b) => a - b)[ring.length >> 1]);
 	const fill = sides.filter((s) => s.filter((p) => dist(p, med) < 0.06).length >= s.length * 0.8).length < 3; if (fill && h < w * 1.6) return null;
-	let th = 0.06; const on = (x, y) => fill || dist(at(x, y), med) > th, segs = (count, n, min) => { const s = []; let a = -1; for (let i = 0; i <= n; i++) { const yes = i < n && count[i] > min; if (yes && a < 0) a = i; if (!yes && a >= 0) { s.push([a, i - 1]); a = -1; } } return s; };
+	let th = 0.06; const on = (x, y) => fill || dist(at(x, y), med) > th, segs = (count, n, min, g = 0) => { const s = []; let a = -1; for (let i = 0; i <= n; i++) { const yes = i < n && count[i] > min; if (yes && a < 0) a = i; if (!yes && a >= 0) { const q = s[s.length - 1]; if (q && a - q[1] <= g) q[1] = i - 1; else s.push([a, i - 1]); a = -1; } } return s; };
 	let dev = { x0: 0, x1: w - 1, y0: 0, y1: h - 1 };
 	if (!fill) for (th of [0.06, 0.3]) { // 0.3: past a shadow
 		const col = new Array(w).fill(0); for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (on(x, y)) col[x]++;
-		const cs = segs(col, w, h * 0.05).map(([a, b]) => ({ a, b, m: col.slice(a, b + 1).reduce((s, v) => s + v, 0) })).sort((p, q) => q.m - p.m)[0]; if (!cs) return null;
+		const cs = segs(col, w, h * 0.05, w * 0.03).map(([a, b]) => ({ a, b, m: col.slice(a, b + 1).reduce((s, v) => s + v, 0) })).sort((p, q) => q.m - p.m)[0]; if (!cs) return null;
 		const row = new Array(h).fill(0); for (let y = 0; y < h; y++) for (let x = cs.a; x <= cs.b; x++) if (on(x, y)) row[y]++;
 		const rs = segs(row, h, (cs.b - cs.a) * 0.05).sort((p, q) => q[1] - q[0] - (p[1] - p[0]))[0]; if (!rs) return null;
 		dev = { x0: cs.a, x1: cs.b, y0: rs[0], y1: rs[1] }; const a = (dev.x1 - dev.x0) * (dev.y1 - dev.y0);
@@ -60,7 +60,7 @@ export function findScreen(img) {
 		return best; };
 	const line = (fixed, from, to, vertical) => { const p = [], s = from < to ? 1 : -1; for (let v = from; v !== to; v += s) p.push(vertical ? [fixed, v] : [v, fixed]); return p; };
 	const side = (fn) => { const v = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8].map(fn).filter(Boolean).sort((a, b) => a.e - b.e); return v.length >= 2 ? v[0] : null; };
-	const off = fill ? [] : [dev.x0 < 2, dev.x1 > w - 3, dev.y0 < 2, dev.y1 > h - 3]; // cut by the image edge
+	const dk = (p) => p.filter((q) => at(...q)[0] < 0.3).length >= 2, off = fill ? [] : [dev.x0 < 2 && dk(line(0, dev.y0, dev.y1, true)), dev.x1 > w - 3 && dk(line(w - 1, dev.y0, dev.y1, true)), dev.y0 < 2 && dk(line(0, dev.x0, dev.x1, false)), dev.y1 > h - 3 && dk(line(h - 1, dev.x0, dev.x1, false))]; // cut by the image edge: a bezel crosses it
 	const bez = [side((f) => walk(line(Math.round(dev.y0 + dh * f), 0, w, false))), side((f) => walk(line(Math.round(dev.y0 + dh * f), w - 1, -1, false))),
 		side((f) => walk(line(Math.round(dev.x0 + dw * f), 0, h, true))), side((f) => walk(line(Math.round(dev.x0 + dw * f), h - 1, -1, true)))].map((v, i) => (off[i] ? null : v));
 	if (bez.filter(Boolean).length < (fill ? 4 : 3)) return null;
@@ -258,15 +258,15 @@ export function structureMatch(ea, eb, x, y, w, h, mask) {
 	const rec = sa ? ra / sa : 0, pre = sb ? rb / sb : 0;
 	return rec + pre ? Math.round(2000 * rec * pre / (rec + pre)) / 10 : 0;
 }
-export const DONE = { overall: 92, region: 85, structure: 60 }, DIFF = { dark: 8, darkLum: 64, edge: 4, at: 0.02 };
+export const DONE = { overall: 85, region: 70, structure: 60 }, DIFF = { dark: 8, darkLum: 64, edge: 4, at: 0.02 };
 const REGION_NAMES = ['top left', 'top', 'top right', 'middle left', 'middle', 'middle right', 'bottom left', 'bottom', 'bottom right'];
 export function regionMatch(a, b, tol = DIFF_TOL, mask = null, norm = false) {
 	const xs = [0, 1, 2, 3].map((i) => Math.round(a.w * i / 3)), ys = [0, 1, 2, 3].map((i) => Math.round(a.h * i / 3)), out = [], ea = edgeMap(a), eb = edgeMap(b);
 	if (norm) { const mean = (e) => e.g.reduce((t, v) => t + v, 0) / e.g.length || 1, ma = mean(ea), mb = mean(eb); for (const [e, m] of [[ea, ma], [eb, mb]]) for (const k of ['g', 'm']) e[k] = e[k].map((v) => v * Math.sqrt(ma * mb) / m); }
 	for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
-		const x = xs[c], y = ys[r], w = xs[c + 1] - x, h = ys[r + 1] - y; let ok = 0, n = 0;
-		for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) { const p = j * a.w + i, k = p * 4; if (mask?.[p]) continue; const t = 0.2126 * a.d[k] + 0.7152 * a.d[k + 1] + 0.0722 * a.d[k + 2] < DIFF.darkLum ? DIFF.dark : tol, q = Math.max(ea.m[p], eb.m[p]) > DIFF.at ? DIFF.edge : 1; n += q; if (Math.abs(a.d[k] - b.d[k]) <= t && Math.abs(a.d[k + 1] - b.d[k + 1]) <= t && Math.abs(a.d[k + 2] - b.d[k + 2]) <= t) ok += q; }
-		out.push({ name: REGION_NAMES[r * 3 + c], x, y, w, h, match: Math.round((ok / (n || 1)) * 1000) / 10, structure: structureMatch(ea, eb, x, y, w, h, mask) });
+		const x = xs[c], y = ys[r], w = xs[c + 1] - x, h = ys[r + 1] - y; let ok = 0, n = 0, mk = 0;
+		for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) { const p = j * a.w + i, k = p * 4; if (mask?.[p]) { mk++; continue; } const t = 0.2126 * a.d[k] + 0.7152 * a.d[k + 1] + 0.0722 * a.d[k + 2] < DIFF.darkLum ? DIFF.dark : tol, q = Math.max(ea.m[p], eb.m[p]) > DIFF.at ? DIFF.edge : 1; n += q; if (Math.abs(a.d[k] - b.d[k]) <= t && Math.abs(a.d[k + 1] - b.d[k + 1]) <= t && Math.abs(a.d[k + 2] - b.d[k + 2]) <= t) ok += q; }
+		out.push({ name: REGION_NAMES[r * 3 + c], x, y, w, h, match: Math.round((ok / (n || 1)) * 1000) / 10, structure: structureMatch(ea, eb, x, y, w, h, mask), masked: Math.round(mk / (w * h) * 100) / 100 });
 	}
 	return out;
 }
@@ -278,7 +278,7 @@ export function markSkips(regions, rects) {
 			for (const b of rects.filter((q) => q.kind === kind)) { const x0 = Math.max(r.x, Math.round(b.x)), x1 = Math.min(r.x + r.w, Math.round(b.x + b.w)), y0 = Math.max(r.y, Math.round(b.y)), y1 = Math.min(r.y + r.h, Math.round(b.y + b.h));
 				for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y - r.y) * r.w + x - r.x; if (!m[i]) { m[i] = 1; n++; } } }
 			return n / (r.w * r.h || 1); };
-		const skip = share('picture') >= 0.5 ? 'picture' : share('floor-raised') >= 0.5 ? 'floor-raised' : null; if (skip) r.skip = skip;
+		const skip = share('picture') >= 0.5 ? 'picture' : share('floor-raised') >= 0.5 ? 'floor-raised'  : r.masked > 0.6 ? 'masked' : null; if (skip) r.skip = skip;
 	}
 	return regions;
 }
@@ -398,9 +398,15 @@ function PART({ part, selector }) {
 }
 function COVERS({ sel }) {
 	const root = sel ? document.querySelector(sel) : null, o = root ? root.getBoundingClientRect() : { left: 0, top: 0 }, out = [];
-	for (const [kind, q] of [['picture', 'img,picture,video,canvas,[data-sample-image]'], ['floor-raised', '[data-floor-raised]']]) for (const e of (root || document.body).querySelectorAll(q)) {
+	for (const [kind, q] of [['picture', 'img,picture,video,canvas,svg,[data-sample-image]'], ['floor-raised', '[data-floor-raised]']]) for (const e of (root || document.body).querySelectorAll(q)) {
 		const cs = getComputedStyle(e), r = e.getBoundingClientRect(); if (cs.visibility === 'hidden' || +cs.opacity < 0.1 || r.width < 1 || r.height < 1) continue;
 		out.push({ kind, x: r.left - o.left, y: r.top - o.top, w: r.width, h: r.height });
+	}
+	if (!sel) for (let tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), n = tw.nextNode(), rg = document.createRange(); n; n = tw.nextNode()) {
+		let b = n.parentElement; if (!n.nodeValue.trim() || !b || getComputedStyle(b).visibility === 'hidden') continue;
+		while (b.parentElement && getComputedStyle(b).display === 'inline') b = b.parentElement;
+		const bs = getComputedStyle(b), br = b.getBoundingClientRect(), rtl = bs.direction === 'rtl'; rg.selectNodeContents(n);
+		for (const r of rg.getClientRects()) if (r.width >= 1) { const p = r.height * 0.15, x0 = rtl ? Math.min(r.left, br.left + parseFloat(bs.paddingLeft)) : r.left - 2 * p, x1 = rtl ? r.right + 2 * p : Math.max(r.right, br.right - parseFloat(bs.paddingRight)); out.push({ kind: 'text', x: x0, y: r.top - p, w: x1 - x0, h: r.height + 2 * p }); }
 	}
 	return out;
 }
@@ -585,6 +591,7 @@ async function main() {
 		console.log(`The draft's ${part ? `${selArg} box (${box.w}x${box.h} CSS px)` : 'first screen'} at ${at} against the ${part ? `ref for ${part}` : 'hero'} (${cropWhy}); a pixel matches when every channel is within ${DIFF_TOL} (${DIFF.dark} on dark), edge pixels count ${DIFF.edge}x. Look at ${file}${rows.length ? ` and ${rfile} (the ${rows.length} worst regions)` : ''}, local only: never upload them.`);
 		for (const w of warns) console.log(w);
 		console.log(done);
+		if (!part && !now.done) console.log(runs >= 2 ? `Run ${runs}: stop the copy here and go to step 2 (at most 2 step 1 runs); name what is short in the reply.` : 'Run 1 of 2: fix the worst regions first (regions.jpg), then run once more.');
 		if (part) console.log(`${P}best run ${best.run} kept: pixel ${best.pixel}, structure ${best.structure} (the mean of the scored regions, lowest ${best.structureMin}), done ${best.done}; send these from ${jf} as fidelity.parts${best !== rec ? `. This run ${runs} scored ${pixel}%: go back to run ${best.run}'s code` : ''}`);
 		return;
 	}
@@ -631,7 +638,7 @@ async function main() {
 	mkdirSync(out, { recursive: true });
 	const shot = join(out, 'fidelity.jpg'); writeFileSync(shot, Buffer.from(await blank.evaluate(SHEET, { rows: sheetRows, foot: [...lines, ...fails] }), 'base64'));
 	await browser.close();
-	const summary = { v: 1, tool: 'gb-fidelity', hero, viewport: `${vp[0]}x${vp[1]}`, scores, far, limits: FAR, raw, detail, refs: pairs.map(({ draftSrc, refSrc, img, nat, ...p }) => p), copiedArt: copied.map(({ sel, ref, at }) => ({ sel, ref, at })), cursors, ms: Date.now() - t0 };
+	const summary = { v: 1, tool: 'gb-fidelity', hero, viewport: `${vp[0]}x${vp[1]}`, scores, far, fails: [...new Set(fails.map((f) => f.split(':')[0].slice(5)))], limits: FAR, raw, detail, refs: pairs.map(({ draftSrc, refSrc, img, nat, ...p }) => p), copiedArt: copied.map(({ sel, ref, at }) => ({ sel, ref, at })), cursors, ms: Date.now() - t0 };
 	writeFileSync(join(out, 'fidelity.json'), JSON.stringify(summary, null, 1));
 	if (asJson) console.log(JSON.stringify(summary, null, 1));
 	else {

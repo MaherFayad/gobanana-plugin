@@ -1,4 +1,4 @@
-// gb-tools v10: the core fetch line's tag.
+// gb-tools v11: the core fetch line's tag.
 // gb-sheet: sketches (or one view) as one labelled contact sheet for a crit.
 //   node gb-sheet.mjs <a.html[?query]> [b.html ...] [--size 1440x900] [--scale 1] [--out <dir>] [--name sheet] [--jpeg]
 import { guard } from './gb-guard.mjs';

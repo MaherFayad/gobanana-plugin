@@ -1,4 +1,4 @@
-// gb-tools v10: the core fetch line's tag.
+// gb-tools v11: the core fetch line's tag.
 // gb-frames: a video or GIF reference as one sheet of time-labelled frames, made here.
 //   node gb-frames.mjs <post or page url | video file> [--frames 12] [--max 20] [--out <dir>] [--name <file>]
 // Exit 0 sheet, 1 no video, 2 usage, 3 no ffmpeg or network blocked.
