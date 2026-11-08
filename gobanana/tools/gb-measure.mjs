@@ -1,6 +1,6 @@
-// gb-tools v9: the core fetch line's tag.
+// gb-tools v10: the core fetch line's tag.
 // gb-measure: a draft's accessibility floor and content honesty at the brief's viewports, FAIL and WARN.
-//   node gb-measure.mjs <file.html|url> [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--json]
+//   node gb-measure.mjs <file.html|url> [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--subject words] [--json]
 //   node gb-measure.mjs --rough <out-dir> a.html b.html ...   floor checks only
 // Flags and checks: measure-script. No style budgets, the look is the hero's.
 // Adapted from taste-skill scripts/inspect.mjs and scripts/lib/rules.mjs (MIT, github.com/Leonxlnx/taste-skill).
@@ -11,23 +11,20 @@ import { basename, dirname, resolve, join } from 'node:path'; import { fileURLTo
 const args = process.argv.slice(2);
 const opt = (n) => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; };
 const flag = (n) => { const i = args.indexOf('--' + n); if (i < 0) return false; args.splice(i, 1); return true; };
-const tp = opt('tokens'), tokens = tp ? JSON.parse(readFileSync(tp, 'utf8')) : null;
+const tp = opt('tokens'), tokens = tp ? JSON.parse(readFileSync(tp, 'utf8')) : null, subject = String(opt('subject') ?? [tokens?.subject ?? ''].flat().join(', ')).trim().slice(0, 60);
 const urlFor = { ar: opt('ar'), en: opt('en') }, outDir = opt('out'), list = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 const langArg = list(opt('languages')), tokenLangs = Array.isArray(tokens?.languages) ? list(tokens.languages.join(',')) : [];
-// ONE language: --languages, else the tokens' language
 const langGiven = langArg.length > 0 || !!tokens?.primaryLanguage || tokenLangs.length > 0;
 let languages = [...new Set(langArg.length ? langArg : [String(tokens?.primaryLanguage || tokenLangs[0] || 'en').toLowerCase()])];
 const ta = []; for (let v; (v = opt('taste-allows')) !== null;) ta.push(v);
 const allow = [...list(ta.join(',')), ...(Array.isArray(tokens?.tasteAllows) ? tokens.tasteAllows.map(String) : [])];
 flag('work'); flag('phone'); const asJson = flag('json'); // --work and --phone are accepted and ignored: no budgets.
-// A landing page needs no [data-mechanic] box
 const landing = flag('landing') || tokens?.landing === true;
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 const roughDir = opt('rough'), rough = roughDir !== null, vpArg = []; for (let v; (v = opt('viewport')) !== null;) vpArg.push(v);
 const stateIds = rough ? [] : list(opt('states')).map(kebab).filter((s) => !/^(default|idle|hover|focus|focus-visible|active|pressed|moving|dragging)$/.test(s)), target = args[0];
 const usage = () => { console.error('usage: node gb-measure.mjs <file.html|url> | --rough <out-dir> a.html ...; every flag: the comment at the top of this file'); process.exit(2); };
 if ((rough && (!roughDir || roughDir.startsWith('--') || !args.length)) || (!target && !languages.every((l) => urlFor[l]))) usage();
-// Viewports: --viewport, else tokens.viewports
 const nearTokens = (src) => { try { if (/^https?:/.test(src)) return null; const fp = src.startsWith('file:') ? fileURLToPath(src.split('?')[0]) : resolve(src.split('?')[0]); return JSON.parse(readFileSync(join(dirname(fp), 'tokens.json'), 'utf8')); } catch { return null; } };
 const vpList = (v) => (Array.isArray(v) ? v : [v]).flatMap((x) => String(x || '').split(',')).map((s) => s.trim()).filter(Boolean);
 const vpRaw = vpArg.length ? vpList(vpArg) : vpList(tokens?.viewports ?? (target ? nearTokens(target)?.viewports : null));
@@ -35,12 +32,10 @@ const viewports = vpRaw.map((s) => { const m = /^(\d{3,4})x(\d{3,4})$/.exec(s); 
 if (!viewports.length) viewports.push([390, 844], [1440, 900]);
 const [mainW, mainH] = viewports[viewports.length - 1]; // the widest view: mechanic, focus, reduced motion and the server's numbers
 const req = createRequire(import.meta.url), gbDir = join(process.env.TMPDIR || '/tmp', 'gb'), noRender = join(gbDir, '.gb-norender');
-// No browser: mark the machine and stop
 const cannot = (e) => { try { mkdirSync(gbDir, { recursive: true }); writeFileSync(noRender, `${new Date().toISOString()} ${String(e?.message || e).split('\n')[0]}\n`); } catch {} console.error(`This machine cannot render: ${String(e?.message || e).split('\n')[0]}\nMarked ${noRender}. Show the draft only with every visual item "not checked".`); process.exit(3); };
 let pw; try { try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); } } catch (e) { cannot(e); }
 
-// Runs in the page
-function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 1440 }) {
+function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 1440, subject = '' }) {
 	const gcs = (e, p) => getComputedStyle(e, p), bcr = (e) => e.getBoundingClientRect(), qsa = (q) => document.body.querySelectorAll(q), qda = (q) => document.querySelectorAll(q);
 	const W = innerWidth, H = innerHeight, mobile = W < 640, out = [], add = (level, id, msg) => out.push({ level, id, msg });
 	const html = document.documentElement, ar = /^ar/.test(html.lang), rtl = gcs(html).direction === 'rtl';
@@ -60,7 +55,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 		srMemo.set(el, v); return v;
 	};
 	const pinMemo = new Map(), pinned = (el) => { if (!el || el === html || el === document.body) return null; if (pinMemo.has(el)) return pinMemo.get(el); const p = gcs(el).position, v = pinned(el.parentElement) || (p === 'fixed' || p === 'sticky' ? el : null); pinMemo.set(el, v); return v; };
-	// A box that scrolls or pans
 	const panMemo = new Map(), panBox = (a) => { if (panMemo.has(a)) return panMemo.get(a); const cs = gcs(a), b = bcr(a);
 		const v = (/auto|scroll/.test(cs.overflowX) && a.scrollWidth > a.clientWidth + 1) || (/auto|scroll/.test(cs.overflowY) && a.scrollHeight > a.clientHeight + 1) || a.matches('[data-pan],[data-viz],[role=application]') || /grab|move/.test(cs.cursor) || cs.touchAction === 'none'
 			|| (/hidden|clip/.test(cs.overflowX + cs.overflowY) && [...a.children].some((k) => { const r = bcr(k); return r.width > b.width * 1.2 + 4 || r.height > b.height * 1.2 + 4; }));
@@ -84,7 +78,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 			const ux = dy / len, uy = -dx / len, c = new DOMPoint((a.x + b.x) / 2 + ux * fs * 0.35, (a.y + b.y) / 2 + uy * fs * 0.35).matrixTransform(m), half = 0.3 * Math.min(len, fs) * det(m);
 			out.push({ left: c.x - half, right: c.x + half, top: c.y - half, bottom: c.y + half, width: 2 * half, height: 2 * half, core: true }); }
 		return out.length ? out : null; } catch { return null; } };
-	// Visible text runs
 	const map = new Map(), tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
 	for (let n = tw.nextNode(); n; n = tw.nextNode()) {
 		const t = n.nodeValue.replace(/\s+/g, ' ').trim(), el = n.parentElement;
@@ -96,7 +89,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	}
 	const T = [...map.values()], shown = T.filter((e) => e.op >= 0.1), total = T.reduce((a, e) => a + e.text.length, 0) || 1;
 	const fold = shown.filter((e) => e.rects.some((r) => onFirst(r, e.el)));
-	// 1. breakage
 	const ov = html.scrollWidth - W; if (ov > 1) {
 		const clipX = (a) => { for (; a && a !== document.body && a !== html; a = a.parentElement) { const cs = gcs(a), b = bcr(a); if ((/hidden|clip/.test(cs.overflowX) || /paint|strict|content/.test(cs.contain)) && b.left >= -1 && b.right <= W + 1) return true; } return false; }, wide = [];
 		for (const e of qsa('*')) { if (e.closest('.gb-switch')) continue; const r = bcr(e);
@@ -110,13 +102,11 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	if ((ar || want === 'ar') && !rtl) add('FAIL', 'dir', `${ar ? 'lang is ar' : 'the Arabic run'} but the page is not dir="rtl"`);
 	const arChars = shown.reduce((n, e) => n + (e.text.match(/[\u0600-\u06FF]/g) || []).length, 0);
 	if (want === 'ar' && !arChars) add('FAIL', 'ar-missing', 'the Arabic run shows no Arabic text; the page language is Arabic, so its copy is Arabic');
-	// 2. the title
 	if (![...qda('h1')].some(vis)) add('WARN', 'no-h1', "no visible h1; a screen reader user finds the page by its h1 (copied from the hero, which shows none at its top? add one, visually hidden if need be)");
 	const tally = (key) => { const m = new Map(); for (const e of T) m.set(key(e), (m.get(key(e)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1]); };
 	const rpx = (e) => Math.round(e.px), sizes = [...new Set(shown.filter((e) => e.text.length >= 2).map(rpx))].sort((a, b) => a - b);
 	const fams = tally((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim()).filter(([, n]) => n / total >= 0.02);
 	const vizLab = (e) => { const v = e.el.closest('[data-viz]'); return v && e.text.replace(/\d[\d.,:%/]*\s*(?:[A-Za-z]{1,3}(?![A-Za-z])|دقيقة|دقائق|ساعة|ساعات)?/g, ' ').split(/[\s,;:·()+\-\u2212]+/).filter(Boolean).length <= 3 ? v : null; };
-	// bodyPx: running body text
 	const bsz = (e) => Math.round(e.el instanceof SVGElement ? e.px : e.size), share = (min) => { const m = new Map(); for (const e of shown) if (!vizLab(e) && e.text.trim().split(/\s+/).length >= min) m.set(bsz(e), (m.get(bsz(e)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null; };
 	const running = share(6), body = running ?? share(1), big = Math.max(...shown.map((e) => e.size), 0);
 	const bodyFloor = ar || want === 'ar' ? 17 : 16;
@@ -128,7 +118,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	const blurOf = (el) => { for (let a = el, d = 0; a && a !== document.body && d < 8; a = a.parentElement, d++) if (/blur\(/.test(gcs(a).filter)) return true; return false; };
 	const blurred = shown.filter((e) => e.text.length >= 2 && e.op >= 0.1 && blurOf(e.el));
 	if (blurred.length) add('FAIL', 'blurred-text', `${blurred.length} text block(s) sit under a blur filter: ${blurred.slice(0, 3).map((e) => '"' + clip(e.text) + '"').join(', ')}; never blur text: show it sharp, or hide it (and say what is hidden in words)`);
-	// 4. contrast
 	const low = [], ground = []; let unmeasured = 0;
 	for (const e of shown) {
 		const svgT = e.el instanceof SVGElement, paint = svgT ? e.cs.fill : e.cs.webkitTextFillColor || e.cs.color, fg = /^(rgb|#|hsl|color\(|lab|lch|oklab|oklch)/.test(paint) ? rgba(paint) : null;
@@ -140,7 +129,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	}
 	if (low.length) add('FAIL', 'contrast', `${low.length} text block(s) under AA: ${low.slice(0, 4).join('; ')}`);
 	if (unmeasured) add('WARN', 'contrast-unmeasured', `${unmeasured} text block(s) on an image or gradient could not be sampled (below the first screen, or a gradient fill): check them by eye at the darkest and lightest point; body text belongs on a solid or glass panel`);
-	// 8. targets
 	const ctl = [...qda('a[href],button,input:not([type=hidden]),select,textarea,[role=button],[role=tab],[role=switch],[role=checkbox],[tabindex]:not([tabindex="-1"])')].filter(vis).filter((e) => !e.closest('.gb-switch') && !srOnly(e)).filter((e) => !(e.tagName === 'A' && gcs(e).display === 'inline' && e.closest('p,li')));
 	const hitBox = (e) => { const r = bcr(e), lab = e.closest('label') || (e.id && document.querySelector(`label[for="${CSS.escape(e.id)}"]`)); if (!lab) return r; const q = bcr(lab); return { width: Math.max(r.width, q.width), height: Math.max(r.height, q.height) }; };
 	const need = mobile ? 44 : 24, small = ctl.filter((e) => { const r = hitBox(e); return r.width < need || r.height < need; });
@@ -200,7 +188,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	const ctlBox = ctl.filter((c) => opac(c) >= 0.1 && !(c instanceof SVGElement && c.localName !== 'svg')).map((c) => ({ c, pin: pinned(c), bx: [...c.getClientRects()].map((r) => cut({ l: r.left + 1, t: r.top + 1, r: r.right - 1, b: r.bottom - 1 }, clipOf(c))).filter((x) => area(x) > 0) }));
 	for (const A of lay) for (const C of ctlBox) { const lab = A.e.el.closest('label,legend'); if (A.pin !== C.pin || C.c.contains(A.e.el) || A.e.el.contains(C.c) || (lab && (lab.control === C.c || lab.contains(C.c)))) continue; if (hitBy(A, C.bx, true, C.c)) overlaps.add(`"${clip(A.e.text)}" and ${sel(C.c)}`); }
 	const marks = [...qsa('*')].filter((m) => { if (m.closest('.gb-switch') || m.matches(CTL)) return false; const r = bcr(m); if (r.width < 4 || r.height < 4 || r.width > 40 || r.height > 40) return false; const cs = gcs(m); if (cs.visibility === 'hidden' || opac(m) < 0.25) return false; if (m instanceof SVGElement) return m.matches('circle,ellipse,rect,polygon,path,image,use') && (m.matches('image,use') || ink(m, 'fill') >= 0.25 || ink(m, 'stroke') >= 0.25); return !m.children.length && !m.textContent.trim() && (rgba(cs.backgroundColor)[3] > 0.5 || cs.backgroundImage !== 'none'); }).map((m) => ({ m, pin: pinned(m), r: cut(box(bcr(m)), clipOf(m)) })).filter((k) => area(k.r) > 0);
-	// SVG text on an SVG shape
 	const inFill = (k, x, y) => { const m = k.getScreenCTM(); return !!m && k.isPointInFill(new DOMPoint(x, y).matrixTransform(m.inverse())); };
 	for (const A of lay) for (const K of marks) { if (A.pin !== K.pin || A.e.el.contains(K.m) || (A.ko && K.m.closest('[data-viz]') === A.viz)) continue; if (A.bx.some((a) => { const m = meet(a, K.r), x = Math.max(a.l, K.r.l) + m.w / 2, y = Math.max(a.t, K.r.t) + m.h / 2; return area(K.r) < area(a) && m.w > 0 && m.h > 0 && m.w * m.h >= Math.max(12, area(K.r) * 0.25) && !(A.e.el instanceof SVGElement && K.m instanceof SVGGeometryElement && !inFill(K.m, x, y)) && !behind(x, y, A.e.el, K.m); })) overlaps.add(`"${clip(A.e.text)}" and a ${K.m.localName}${cls(K.m).trim() ? '.' + cls(K.m).trim().split(/\s+/)[0] : ''}`); }
 	const pe = document.createElement('style'); pe.textContent = '*{pointer-events:auto!important}'; document.head.append(pe);
@@ -223,7 +210,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	scrollTo({ top: Y0, left: X0, behavior: 'instant' }); pe.remove();
 	for (const [key, n] of hits) if (n >= 2) overlaps.add(key);
 	if (overlaps.size) add('FAIL', 'text-overlap', `${overlaps.size} overlap(s) of text with text, a control or a marker: ${[...overlaps].slice(0, 3).join('; ')}; give each label its own room (offset it, shorten it, wrap it, or give the object more room)`);
-	// clipped-text
 	const ell = (x) => { const s = gcs(x); return s.textOverflow === 'ellipsis' || (s.webkitLineClamp && s.webkitLineClamp !== 'none'); }, cutText = [];
 	for (const e of shown) {
 		if (e.text.length < 2 || e.op < 0.1 || (e.px >= 40 && e.el.closest('[data-bleed]'))) continue; let hit = null, rs = e.rects.map((r) => { if (e.el instanceof SVGElement) { const k = inkRect(e, r); return { left: k.l, right: k.r, top: k.t, bottom: k.b }; } return { left: r.left, right: r.right, top: r.top + r.height * 0.18, bottom: r.bottom - r.height * 0.18 }; }); // SVG text by its ink
@@ -277,15 +263,31 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 		const coverOf = (e) => { const r = bcr(e), x = r.left + r.width / 2, y = r.top + r.height / 2; if (x < 0 || x >= W || y < 0 || y >= H) return null; const h = document.elementFromPoint(x, y), p = h && pinned(h); return p && !p.contains(e) && !e.contains(h) && !p.closest('.gb-switch') ? p : null; };
 		const root = document.scrollingElement || html, scrollerOf = (e) => { for (let a = e.parentElement; a && a !== document.body && a !== html; a = a.parentElement) { const cs = gcs(a); if (/auto|scroll|overlay/.test(cs.overflowY) && a.scrollHeight > a.clientHeight + 1) return a; } return root; };
 		const clear = (e, p, box) => { const pr = bcr(p), r = bcr(e); box.scrollBy({ top: pr.top > H / 2 ? r.bottom - pr.top + 4 : -(pr.bottom - r.top + 4), behavior: 'instant' }); };
-		const under = new Map();
-		for (const e of [...new Set([...ctl.filter((c) => onFirst(bcr(c), c)), ...fold.filter((x) => !x.el.closest(CTL)).map((x) => x.el)])]) {
-			if (pinned(e) || opac(e) < 0.1 || e.closest('[inert],[aria-hidden="true"]')) continue; const p = coverOf(e); if (!p) continue;
+		const under = new Map(), end = new Map(), probe = (e, m) => {
+			if (pinned(e) || opac(e) < 0.1 || e.closest('[inert],[aria-hidden="true"]')) return; const p = coverOf(e); if (!p) return;
 			const kept = []; for (let a = e.parentElement; a; a = a.parentElement) kept.push([a, a.scrollTop, a.scrollLeft]); if (!kept.some(([a]) => a === root)) kept.push([root, root.scrollTop, root.scrollLeft]);
 			if (e.matches(CTL)) e.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
 			else { const box = scrollerOf(e); let q = p; for (let i = 0; q && i < 4; i++) { clear(e, q, i % 2 && box !== root ? root : box); q = coverOf(e); } }
-			if (coverOf(e)) under.set(e, p); for (const [a, t, l] of kept) a.scrollTo({ top: t, left: l, behavior: 'instant' });
+			if (coverOf(e)) m.set(e, p); for (const [a, t, l] of kept) a.scrollTo({ top: t, left: l, behavior: 'instant' });
+		};
+		const ex = (m) => `${[...new Set([...m.values()].map(sel))].join(', ')} and stay there${m === end ? '' : ' when scrolled or focused'}: ${[...m.keys()].slice(0, 3).map((e) => e.matches(CTL) ? sel(e) : `"${clip(txtOf(e))}"`).join(', ')}; give the page padding-bottom and scroll-padding-bottom on its scroller (html, or the app shell's main; top for a top bar) equal to the height of every bar pinned to that edge together`;
+		for (const e of new Set([...ctl.filter((c) => onFirst(bcr(c), c)), ...fold.filter((x) => !x.el.closest(CTL)).map((x) => x.el)])) probe(e, under);
+		if (under.size) add('FAIL', 'covered-content', `${under.size} item(s) on the ${scr} sit under ${ex(under)}; two bars on one edge (an action and a nav) read best as one fixed dock`);
+		const items = [...new Set([...ctl, ...shown.filter((x) => !x.el.closest(CTL)).map((x) => x.el)])].filter((e) => !under.has(e)), boxes = new Map([root, ...items.map(scrollerOf)].map((b) => [b, b.scrollTop]));
+		for (const b of boxes.keys()) b.scrollTo({ top: b.scrollHeight, behavior: 'instant' });
+		if ([...boxes].some(([b, t]) => b.scrollTop !== t)) for (const e of items) { const r = bcr(e); if (r.bottom > 0 && r.top < H) probe(e, end); }
+		for (const [b, t] of boxes) b.scrollTo({ top: t, behavior: 'instant' });
+		if (end.size) add('FAIL', 'covered-content', `${end.size} item(s) at the end of the scroll sit under ${ex(end)}`);
+		if (mobile && H >= 600) {
+			const pill = [...qsa('div,span,i,b,hr')].find((e) => { const r = bcr(e); return r.width >= 60 && r.width <= 200 && r.height >= 2 && r.height <= 10 && Math.abs(r.left + r.width / 2 - W / 2) < 30 && r.bottom > H - 34 && r.bottom <= H + 1 && !txtOf(e).trim() && rgba(gcs(e).backgroundColor)[3] > 0.3; }), pr = pill && bcr(pill);
+			const envSel = [], envOf = (rules) => { for (const r of rules) { if (r.selectorText && /safe-area-inset-bottom/.test(r.style?.cssText || '')) envSel.push(r.selectorText); if (r.cssRules) envOf(r.cssRules); } }; for (const sh of document.styleSheets) try { envOf(sh.cssRules); } catch {}
+			const padded = (e) => { for (let a = e; a && a !== html; a = a.parentElement) if (/safe-area-inset-bottom/.test(a.getAttribute('style') || '') || envSel.some((q) => { try { return a.matches(q); } catch { return false; } })) return true; return false; };
+			const still = root.scrollHeight <= H + 1, barOf = (e) => pinned(e) || (still && scrollerOf(e) === root ? e.closest('nav,footer,header,[role=tablist],[role=toolbar]') || e.parentElement : null), zone = new Map();
+			for (const x of shown) { if (x.el.closest('.gb-switch,[aria-hidden="true"]')) continue; const bar = barOf(x.el), ok = bar && padded(x.el); if (x.rects.some((q) => { const k = q.height / 4; return (bar && !ok && (q.top + q.bottom) / 2 > H - 34 && q.top < H) || (pr && q.right > pr.left && q.left < pr.right && q.bottom - k > pr.top && q.top + k < pr.bottom); })) zone.set(x.el.closest(CTL) || x.el, bar); }
+			for (const c of ctl) { const r = bcr(c), bar = barOf(c); if (bar && !padded(c) && !c.closest('.gb-switch') && Math.min(r.bottom, H) - Math.max(r.top, H - 34) >= r.height / 2) zone.set(c, bar); }
+			const bars = [...new Set([...zone.values()].filter(Boolean).map(sel))];
+			if (zone.size) add('FAIL', 'home-indicator', `${zone.size} item(s)${bars.length ? ' in ' + bars.join(', ') : ''} sit in the bottom 34px of the phone screen, under the home indicator${pill ? ' ' + sel(pill) : ''}: ${[...zone.keys()].slice(0, 3).map((e) => `"${clip(txtOf(e)) || sel(e)}"`).join(', ')}; keep text and controls 34px clear of the bottom edge (the bar's padding-bottom: max(34px, env(safe-area-inset-bottom)))`);
 		}
-		if (under.size) { const ex = [...under.keys()].slice(0, 3).map((e) => e.matches(CTL) ? sel(e) : `"${clip(txtOf(e))}"`); add('FAIL', 'covered-content', `${under.size} item(s) on the ${scr} sit under ${[...new Set([...under.values()].map(sel))].join(', ')} and stay there when scrolled or focused: ${ex.join(', ')}; give the page padding-bottom and scroll-padding-bottom on its scroller (html, or the app shell's main; top for a top bar) equal to the height of every bar pinned to that edge together; two bars on one edge (an action and a nav) read best as one fixed dock`); }
 	}
 	const STATUS = /^(status|late|overdue|stale|error|failed|fail|failing|warning|warn|ok|success|done|complete|completed|pending|waiting|blocked|held|running|idle|online|offline|busy|away|danger|critical|urgent|review|approved|rejected|paused)$/i;
 	const stCls = (e) => cls(e).split(/\s+/).filter((c) => c && c.split(/[-_]+/).some((t) => STATUS.test(t))), keyOf = (e) => e.dataset?.status ?? stCls(e).sort().join(' ');
@@ -329,11 +331,12 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	}
 	if (cutLab.length) add(cutLab.length > 3 || cutHead || cutBtn ? 'FAIL' : 'WARN', 'truncated-label', `${cutLab.length} short label(s) cut by an ellipsis${cutHead ? ` (${cutHead} of them heading(s), cut on a normal day)` : ''}${cutBtn ? ` (${cutBtn} on a button or the main action)` : ''}: ${cutLab.slice(0, 3).join(', ')}; a name under 24 characters, a heading and a button label at any length show whole: give it room, let it wrap, or shorten it`);
 	const txt = document.body.innerText;
-	if (/lorem ipsum|dolor sit|John Doe|Jane Doe|\bAcme\b|\bItem \d\b|User name/i.test(txt)) add('FAIL', 'placeholder', 'placeholder copy on the page (lorem, John Doe, Acme, Item 1)');
 	const ownTxt = shown.filter((e) => !e.el.closest('[data-user-text]')).map((e) => e.text).join(' ');
+	const VERB = /^(?:hold|tap|swipe|press|click|slide|drag|enter|check|type|scan|sign|use|reply|text|call|pay|pull|double|select|choose|upload|add)\b/i, phTxt = [...new Set(shown.filter((e) => !e.el.closest('[data-user-text]')).flatMap((e) => { const t = e.text.replace(/\s+/g, ' ').trim(), m = !VERB.test(t) && /^\(?((?:[\w'’:,-]+ ){0,3}\(?to confirm\)?|wordmark|your logo|logo here)\)?[.:]?$/i.exec(t); return [...(t.match(/\b(?:lorem(?: ipsum)?|dolor sit|john doe|jane doe|acme|item \d|user name|tbd)\b/gi) || []), ...(m ? [m[1]] : [])]; }).map((x) => x.toLowerCase()))];
+	if (phTxt.length) add('FAIL', 'placeholder', `placeholder copy on the page (${phTxt.slice(0, 6).join(', ')}); write the product's own words or plausible sample names and data, each listed once under To confirm in the report, never in the UI`);
 	const STOCK = /\b(?:unlock(?:s|ing)? (?:your|their|the|its) (?:full |true )?potential|unleash(?:es|ing)? (?:your|the) (?:full )?(?:power|potential)|supercharge(?:s)? your \w+|seamless(?:ly)? (?:experience|integration|workflow|solution)s?|elevate(?:s)? your (?:experience|game|brand|business|workflow)|empower(?:s|ing)? (?:you|your (?:team|business)|teams|businesses) to|effortless(?:ly)? (?:experience|solution)s?|cutting[- ]edge (?:technology|solutions?|platform)|next[- ]gen(?:eration)? (?:platform|solutions?|experience)|world[- ]class (?:experience|solutions?|platform|service)|all[- ]in[- ]one (?:solution|platform|hub)|revolutioni[sz]e(?:s)? (?:the way|how) you|takes? (?:it|your \w+|things) to the next level|reimagined for the modern|streamline(?:s)? your workflow|game[- ]chang(?:er|ing))\b/gi;
 	const filler = [...new Set((ownTxt.match(STOCK) || []).map((x) => x.toLowerCase()))];
-	if (filler.length) add('FAIL', 'stock-copy', `stock phrases on the page: ${filler.slice(0, 6).join(', ')}; write the product's own words (a real name, a real number, what it does), or mark what is not known "to confirm"; quote the user's own copy in [data-user-text]`);
+	if (filler.length) add('FAIL', 'stock-copy', `stock phrases on the page: ${filler.slice(0, 6).join(', ')}; write the product's own words (a real name, a real number, what it does), a claim not in the brief stays out; quote the user's own copy in [data-user-text]`);
 	const EMOJI = /\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F/u, emo = shown.filter((e) => EMOJI.test(e.text) && !e.el.closest('code,pre,kbd,samp,[data-user-text]'));
 	if (emo.length) add('FAIL', 'emoji', `${emo.length} text block(s) with emoji in the interface ("${clip(emo[0].text)}"); use a drawn icon (inline SVG) or a word; a user's own message keeps its emoji in [data-user-text]`);
 	const artOf = (x) => { const st = gcs(x); return st.backgroundImage !== 'none' || (st.maskImage && st.maskImage !== 'none') || ['::before', '::after'].some((ps) => !/^(none|normal|""|)$/.test(gcs(x, ps).content)); };
@@ -345,6 +348,8 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	const phImg = [...qda('img')].filter((e) => !e.closest('.gb-switch') && vis(e) && ((e.complete && !e.naturalWidth) || /placehold|placeholder|dummyimage|placekitten|fakeimg|\/via\.placeholder/i.test(e.currentSrc || e.src || '')));
 	const ph = [...phBox.filter((e) => !phBox.some((o) => o !== e && o.contains(e))).map((e) => [e, 'a flat colour box']), ...phImg.map((e) => [e, e.complete && !e.naturalWidth ? 'an image that did not load' : 'a placeholder image service'])];
 	if (ph.length) add('FAIL', 'placeholder-media', `${ph.length} placeholder picture(s): ${ph.slice(0, 3).map(([e, why]) => { const r = bcr(e); return `${sel(e)} ${Math.round(r.width)}x${Math.round(r.height)} (${why})`; }).join(', ')}; show the real picture (the pictures ladder in gobanana-draft/pictures), draw the thing with type and shapes, or cut the box (a drawn shape on purpose: data-shape)`);
+	const picOk = (e) => { const r = bcr(e); return r.width >= 64 && r.height >= 64 && r.width * r.height >= 9000 && vis(e) && opac(e) >= 0.1 && !e.closest('.gb-switch,[data-viz]'); };
+	if ((subject || qsa('input:not([type=hidden]),select,textarea,[role=switch]').length < 2) && ![...qsa('img,video,canvas,svg,[data-sample-image]')].some((e) => picOk(e) && !(e instanceof SVGElement && e.ownerSVGElement) && (e.localName !== 'img' || e.naturalWidth > 0) && (e.localName !== 'svg' || e.querySelectorAll('path,circle,ellipse,polygon,rect,image').length >= 2)) && ![...qsa('*')].some((e) => /url\(/.test(gcs(e).backgroundImage) && picOk(e))) add('WARN', 'no-picture', `no picture of the subject${subject ? ` (${subject})` : ''} on the page: no image, illustration or background picture of 64px or more; show it (playbook gobanana-draft/pictures)`);
 	if (ar && /[\u064B-\u065F\u0670]/.test(txt)) add('FAIL', 'ar-diacritics', 'Arabic diacritics on the page');
 	if (ar && /[\u0660-\u0669\u06F0-\u06F9]/.test(txt)) add('FAIL', 'eastern-digits', 'Eastern Arabic digits; use Western digits 0 to 9');
 	if (ar && /[\u0600-\u06FF] ?, ?[\u0600-\u06FF]/.test(txt)) add('WARN', 'ar-comma', 'Latin comma between Arabic words; use the Arabic comma');
@@ -352,7 +357,6 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	const trk = arT.filter((e) => parseFloat(e.cs.letterSpacing) > 0); if (trk.length) add('FAIL', 'ar-tracking', `${trk.length} Arabic block(s) with letter-spacing ("${clip(trk[0].text)}"); it breaks the joins`);
 	const lead = arT.filter((e) => e.el.closest('h1,h2,h3,h4') && parseFloat(e.cs.lineHeight) / e.size < 1.3); if (lead.length) add('WARN', 'ar-leading', `${lead.length} Arabic heading(s) under 1.3 line height ("${clip(lead[0].text)}")`);
 	const dashed = T.filter((e) => /[\u2013\u2014]/.test(e.text)); if (dashed.length) add('FAIL', 'dash', `${dashed.length} text block(s) with an em or en dash ("${clip(dashed[0].text)}"); use a comma, a colon, a full stop or "to"`);
-	// 9b. copy register
 	const AR_SLANG = 'عشان|علشان|دلوقتي|دلوقت|كده|كدا|ازاي|إزاي|مش|عايز|عايزة|عاوز|بتاع|بتاعت|بتاعك|ده|دي|برا|جوا|قايمة|مستني|مستنية|مستنيك|مستنياك|لسه|لسة|اتعمل|اتضاف|يتضاف|بيستعمل|بيسأل|بيشتغل|بيعمل|بتعمل|الحين|ايش|إيش|وش|ليش|شلون|وايد|يبغى|تبغى|هيك|شو|بدي|بدك|منيح|كتير';
 	const AR_LOAN = 'كونسبت|كونسبتس|كونسيبت|ديزاين|يوزر|يوزرز|فيدباك|تاسك|تاسكات|أبديت|ابديت|سيتنج|سيتنجز|بروجكت|بروجيكت|ريفيو|أبروف|ابروف|كوميت|ستيتس';
 	const arWord = (list) => new RegExp('(?:^|[^\\u0600-\\u06FF])[وف]?(' + list + ')(?![\\u0600-\\u06FF])');
@@ -387,6 +391,10 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	const declared = [...new Set(shown.filter((e) => e.text.length >= 2).map((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim()).filter((f) => f && !GENERIC.test(f)))];
 	const missingFonts = declared.filter((f) => unloaded(f, shown.filter((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim() === f).map((e) => e.text).join(' ')));
 	const measured = { lang: html.lang, dir: rtl ? 'rtl' : 'ltr', textElements: textUnits, controls: ctlUnits, bodyPx: body, smallText: tiny.length, arabicChars: arChars, largest: Math.round(big), sizes, families: fams.map(([f]) => f), scripts, loadedFonts, declaredFonts: declared, missingFonts };
+	if (main && !allow.includes('static') && !ctl.some((e) => { const cs = gcs(e); return cs.animationName !== 'none' || (cs.transitionProperty !== 'none' && cs.transitionDuration.split(',').some((d) => parseFloat(d) > 0)); })) {
+		const PS = /:(hover|active)\b/, hit = (rules) => [...rules].some((r) => (r.selectorText && PS.test(r.selectorText) && !/gb-switch/.test(r.selectorText) && r.style?.length && r.selectorText.split(',').some((q) => { try { return PS.test(q) && !!document.querySelector(q.replace(/:(hover|active|focus-visible|focus-within|focus)\b/g, '').replace(/[\s>+~]+$/, '') || '*'); } catch { return false; } })) || (r.cssRules && hit(r.cssRules)));
+		if (![...document.styleSheets].some((sh) => { try { return hit(sh.cssRules); } catch { return false; } })) add('WARN', 'static', 'no interaction states: no control has a transition or animation, and no :hover or :active rule changes one (a focus ring is the floor, not a state); give the main controls a pressed state and a short transition (playbook gobanana-draft/motion-recipes)');
+	}
 	const kinds = [...qda('[data-mechanic]')].map((e) => [e.dataset.mechanic.trim().toLowerCase(), e]), ok = ([k]) => ['scroll', 'tap', 'swipe'].includes(k), bad = kinds.find((k) => !ok(k));
 	if (main && !matchMedia('(prefers-reduced-motion: reduce)').matches && !/[?&](state|data)=/.test(location.search) && !allow.includes('mechanic-missing')) {
 		if (!kinds.some(ok) && landing) {} // a landing page's static line needs none
@@ -408,8 +416,7 @@ const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - 
 const browser = guard(await pw.chromium.launch().catch(cannot)), runs = [], report = [];
 try { rmSync(noRender, { force: true }); } catch {}
 const pageUrl = (src) => { const [fp, q] = src.split('?'); return new URL(/^https?:|^file:/.test(src) ? src : pathToFileURL(resolve(fp)).href + (q ? '?' + q : '')); };
-const LAYOUT = ['overflow', 'text-overlap', 'clipped-text', 'text-spill', 'covered-content', 'hidden-shown', 'small-text'];
-// A rough gets the floor only: contrast, body and text size
+const LAYOUT = ['overflow', 'text-overlap', 'clipped-text', 'text-spill', 'covered-content', 'home-indicator', 'hidden-shown', 'small-text'];
 const ROUGH = ['overflow', 'body-size', 'small-text', 'contrast', 'contrast-ground', 'target-size', 'side-margin', 'text-overlap', 'alt-missing'];
 const settle = async (page, ms) => { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(ms); };
 async function measureRun(r, src) {
@@ -417,7 +424,7 @@ async function measureRun(r, src) {
 	const u = pageUrl(urlFor[r.lang] || src); if (r.lang && !urlFor[r.lang]) u.searchParams.set('lang', r.lang); if (r.state) u.searchParams.set('state', r.state);
 	const wait = r.rough ? 800 : 1500;
 	await page.goto(u.href, { waitUntil: 'load' }); await settle(page, wait);
-	const res = await page.evaluate(MEASURE, { want: r.lang, allow, landing, main: r.w === mainW && !r.rough });
+	const res = await page.evaluate(MEASURE, { want: r.lang, allow, landing, main: r.w === mainW && !r.rough, subject });
 	if (r.state) { res.findings = res.findings.filter((f) => LAYOUT.includes(f.id)); res.ground = []; }
 	const kinds = r.rough ? [] : await page.$$eval('[data-mechanic]', (es) => es.map((e) => [e.dataset.mechanic.trim().toLowerCase()]));
 	if (!r.reduce && !r.state && !allow.includes('mechanic-still')) for (const [i, [kind]] of kinds.entries()) {
@@ -432,7 +439,6 @@ async function measureRun(r, src) {
 		if (kind !== 'scroll') await el.scrollIntoViewIfNeeded().catch(() => {});
 		const b = await box(), shot = ({ x, y, width, height }) => page.screenshot({ fullPage: true, clip: { x, y, width, height } }); if (b.width < 1 || b.height < 1) continue;
 		const before = await shot(b), m = page.mouse;
-		// scroll: the page by one screen
 		if (kind === 'scroll' && b.scrolls === 'page') await page.evaluate(() => scrollBy(0, innerHeight)); else if (kind === 'scroll') { await m.move(b.cx, b.cy); await m.wheel(0, r.h); }
 		else if (kind === 'tap') await m.click(b.tx ?? b.cx, b.ty ?? b.cy); else { await m.move(b.cx, b.cy); await m.down(); await m.move(b.cx + (b.rtl ? 200 : -200), b.cy, { steps: 10 }); await m.up(); }
 		await page.waitForTimeout(400); let same = before.equals(await shot(await box()));
@@ -530,26 +536,22 @@ if (rough) {
 	process.exit(bad ? 1 : 0);
 }
 
-// No --languages and no tokens
 if (!langGiven && target) { const l = await firstLang(target); if (l) languages = [l]; }
 for (const lang of languages) for (const [w, h] of viewports) runs.push({ lang, w, h, reduce: false });
 runs.push({ lang: languages[0], w: mainW, h: mainH, reduce: true });
 for (const state of stateIds) for (const [w, h] of viewports) runs.push({ lang: languages[0], w, h, reduce: false, state });
 for (const r of runs) report.push(await measureRun(r, target));
 await browser.close();
-// measure.json goes next to the shots
 const extra = (() => { try { const q = String(target || '').split('?')[1]; return q ? [...new URLSearchParams(q)].filter(([k]) => !/^(lang|shot)$/.test(k)).map(([k, v]) => `-${k}-${v}`).join('').replace(/[^\w-]/g, '') : ''; } catch { return ''; } })();
 const jsonPath = join(resolve(outDir || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), `measure${extra}.json`);
 const { findings, measure, fails } = summarize(report, target, languages, jsonPath, false);
 if (asJson) console.log(JSON.stringify(report, null, 1));
 else {
 	for (const x of report) { if (x.reduced || x.state) continue; const m = x.measured; console.log(`${x.run}: body ${m.bodyPx ?? 'n/a'}px, under 14px ${m.smallText}, text ${m.textElements}, sizes [${m.sizes}], largest ${m.largest}px, faces [${m.families}]`); }
-	// One line per failing check
 	for (const e of findings) console.log(`${e.level} ${e.id}: ${e.msgs.map(({ msg, runs: at }) => `${msg}  [${at.join(', ')}]`).join('; also ')}`);
 }
 const at = `${mainW}`;
 if (measure) console.log(`${fails} failing check(s), body ${measure.bodyPx}px, ${measure.textElements} text elements read at ${at}. Summary: ${jsonPath}`);
 else console.log(`${fails} failing check(s). No measure for add_to_canvas: ${![target, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u))) ? `no ${at} run found body text` : 'this run was a ?state or ?data view'}; measure the rendered default view (no ?state or ?data) for it. Summary: ${jsonPath}`);
 console.log(fails ? 'Open FAILs go in measure.openFails; nothing here blocks placing.' : 'Numbers are evidence for the craft check; they never replace looking side by side.');
-// Exit 0 when it ran
 process.exit(0);

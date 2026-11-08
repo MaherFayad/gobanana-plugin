@@ -1,4 +1,4 @@
-// gb-tools v9: the core fetch line's tag.
+// gb-tools v10: the core fetch line's tag.
 // gb-lint: motion, phone and 14px floor checks. node gb-lint.mjs <file.html> [--fix] [--measure-dir <dir>] (lint-<rule> ids into measure.json)
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"; import { join, resolve } from "node:path";
 const argv = process.argv.slice(2), ti = argv.indexOf("--tokens"), mi = argv.indexOf("--measure-dir"), file = argv.find((a, i) => !a.startsWith("--") && (ti < 0 || i !== ti + 1) && (mi < 0 || i !== mi + 1));
@@ -17,14 +17,11 @@ if (argv.includes("--fix")) {
 	if (src !== t) fixed.push(`viewport: viewport-fit=cover added${vp ? "" : " in a new viewport line"}`);
 	if (src !== was) { writeFileSync(file, src); for (const f of fixed) console.log(`FIXED ${f}`); }
 }
-// --tokens is accepted for older calls
 const css = styleText(src);
 const rtlPage = /<html[^>]*\b(?:dir=["']?rtl|lang=["']?(?:ar|he|fa|ur))\b|\[dir=["']?rtl|:dir\(rtl\)|:lang\(ar\)/i.test(src);
 const out = [];
-// Each finding has a kebab id starting lint-
 const failRules = new Set();
 const add = (id, rule, at, lvl = "FAIL") => { if (lvl === "FAIL") failRules.add(id); out.push(`${lvl} ${id}: ${rule}: ${at.trim().slice(0, 90)}`); };
-// Type: the 14px floor
 const vars = new Map([...css.matchAll(/(--[\w-]+)\s*:\s*([^;}]+)/g)].map((m) => [m[1], m[2].trim()]).reverse());
 const rv = (v, d = 0) => (d > 4 ? v : v.replace(/var\(\s*(--[\w-]+)\s*(?:,([^)]*))?\)/g, (_, n, fb) => rv(vars.get(n) ?? fb ?? "", d + 1)));
 const px = (v) => { const m = String(v).trim().match(/^([\d.]+)(px|rem)$/i); return m ? +m[1] * (/rem/i.test(m[2]) ? 16 : 1) : null; };
@@ -32,7 +29,6 @@ const low = (v) => { v = rv(v).trim().toLowerCase(); const k = { "xx-small": 9, 
 const small = [];
 const FINE_PRINT = /^(?:.*[\s>+~])?(?:small|svg|tspan|text)(?:[.:#[].*)?$|\.(?:legal|fine)(?![\w-])|(?:^|[\s>+~])svg(?![\w-])/i;
 const finePrint = (sel) => sel.split(",").every((part) => FINE_PRINT.test(part.trim()));
-// Walk blocks with the stack of at-rules around each
 const stack = []; let buf = "";
 for (const ch of css.replace(/\/\*[\s\S]*?\*\//g, "").replace(/@(?:import|charset|namespace)\b(?:"[^"]*"|'[^']*'|\([^)]*\)|[^;"'(])*;/gi, "")) {
 	if (ch === ";" && !stack.length) { buf = ""; continue; }
@@ -75,16 +71,12 @@ if (/<html/i.test(src)) {
 	if (/maximum-scale|user-scalable\s*=\s*no/.test(vp)) add("lint-zoom-blocked", "zoom blocked", "remove maximum-scale and user-scalable=no (SC 1.4.4)");
 }
 console.log(out.length ? out.join("\n") : "PASS: no motion, phone or type floor findings");
-// One count per rule id, as gb-measure counts its checks
 const rules = [...failRules], lintFails = rules.length;
 if (mi >= 0) {
-	// gb-measure keeps this count while the file is unchanged
 	const p = join(resolve(argv[mi + 1]), "measure.json"); let m = {}; try { m = JSON.parse(readFileSync(p, "utf8")); } catch {}
 	m.lint = { file: resolve(file), mtimeMs: statSync(file).mtimeMs, fails: lintFails, rules, at: new Date().toISOString() };
 	m.lintFails = lintFails; if (m.measure) m.measure.lintFails = lintFails;
-	// Round 8: its FAILs join failIds as lint-<rule>
 	m.failIds = [...new Set([...(m.failIds || []).filter((id) => !id.startsWith("lint-")), ...rules])];
-	// A rough names every open FAIL
 	if (m.measure?.rough) { const open = [...new Set([...(m.failIds || []), ...rules])]; if (open.length) m.measure.openFails = open; else delete m.measure.openFails; } if (m.round1 && m.round === 1 && m.round1.lintFails === undefined) m.round1.lintFails = lintFails;
 	try { mkdirSync(resolve(argv[mi + 1]), { recursive: true }); writeFileSync(p, JSON.stringify(m, null, 1)); console.log(`${lintFails} lint FAIL(s) written to ${p}`); } catch (e) { console.error(`could not write ${p}: ${e.message}`); }
 }

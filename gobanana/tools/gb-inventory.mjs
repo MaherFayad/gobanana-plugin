@@ -1,4 +1,4 @@
-// gb-tools v9: the core fetch line's tag.
+// gb-tools v10: the core fetch line's tag.
 // gb-inventory: how many colours, sizes, spacings and radii a live page really uses, which are near duplicates, and a tidy set made only from them. Computed styles only, no AI.
 //   node gb-inventory.mjs <url|file.html> [more] [--viewport 390x844] [--out dir] [--json]
 //   Writes <out>/inventory.json and inventory.md (default out: $TMPDIR/gb/inventory). Exit 0 done, 1 a page did not load, 2 usage, 3 this machine cannot render.
@@ -6,7 +6,6 @@ import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// sRGB 0 to 255 to OKLab
 export function oklab(r, g, b) {
 	const f = (x) => ((x /= 255) <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4), R = f(r), G = f(g), B = f(b);
 	const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B), m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B), s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
@@ -15,13 +14,11 @@ export function oklab(r, g, b) {
 const labOf = (hex) => oklab(parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16));
 const R1 = (x) => Math.round(x * 10) / 10;
 
-// Near-duplicate limits: colours an OKLab distance, the rest in their own unit. Budgets: what a tidy page needs at most.
 export const NEAR = { colors: 0.02, fontSizes: 1, spacing: 2, radii: 2, lineHeights: 0.1, letterSpacing: 0.2, fontFamilies: 0, fontWeights: 0, shadows: 0 };
 export const BUDGET = { colors: 12, fontSizes: 7, fontFamilies: 2, fontWeights: 3, lineHeights: 4, letterSpacing: 3, spacing: 8, radii: 3, shadows: 3 };
 export const WEIGHT = { colors: 3, fontSizes: 2, spacing: 2, radii: 1, fontFamilies: 1, fontWeights: 1, lineHeights: 1, letterSpacing: 1, shadows: 1 };
 export const CATEGORIES = Object.keys(NEAR);
 
-// In the page: every visible element's computed styles, tallied
 function COLLECT() {
 	const R1 = (x) => Math.round(x * 10) / 10;
 	const cx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });

@@ -1,14 +1,12 @@
-// gb-tools v9: the core fetch line's tag.
+// gb-tools v10: the core fetch line's tag.
 // gb-fidelity: a draft against its hero, pixels and the DOM only, no AI; the hero and refs are read in memory
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url'; import { createHash } from 'node:crypto';
 
-// Far limits (scores are closeness 0 to 1)
 export const FAR = { layout: 0.5, palette: 15, type: 1.6, imagery: 0.5, density: 2 };
 export const AXES = ['layout', 'palette', 'type', 'imagery', 'density'];
 
-// sRGB 0 to 255 to OKLab
 export function oklab(r, g, b) {
 	const f = (x) => ((x /= 255) <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4), R = f(r), G = f(g), B = f(b);
 	const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B), m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B), s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
@@ -17,14 +15,12 @@ export function oklab(r, g, b) {
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const r2 = (x) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 100) / 100);
 
-// Images are { w, h, d }: d holds RGBA bytes, row by row
 export function crop(img, x, y, w, h) {
 	x = Math.max(0, Math.round(x)); y = Math.max(0, Math.round(y)); w = Math.min(img.w - x, Math.round(w)); h = Math.min(img.h - y, Math.round(h));
 	const d = new Uint8ClampedArray(w * h * 4);
 	for (let j = 0; j < h; j++) d.set(img.d.subarray(((y + j) * img.w + x) * 4, ((y + j) * img.w + x + w) * 4), j * w * 4);
 	return { w, h, d };
 }
-// Box-average resize
 export function resize(img, W, H) {
 	const d = new Uint8ClampedArray(W * H * 4), sx = img.w / W, sy = img.h / H;
 	for (let j = 0; j < H; j++) {
@@ -39,7 +35,6 @@ export function resize(img, W, H) {
 }
 const labOf = (img) => { const n = img.w * img.h, L = new Float32Array(n), A = new Float32Array(n), B = new Float32Array(n); for (let i = 0; i < n; i++) { const [l, a, b] = oklab(img.d[i * 4], img.d[i * 4 + 1], img.d[i * 4 + 2]); L[i] = l; A[i] = a; B[i] = b; } return { L, A, B }; };
 
-// A phone mockup: a device on a plain backdrop, or filling a tall capture
 export function findScreen(img) {
 	const { w, h } = img, lab = labOf(img), at = (x, y) => { const i = y * w + x; return [lab.L[i], lab.A[i], lab.B[i]]; };
 	const t = Math.max(2, Math.round(Math.min(w, h) * 0.02)), sides = [[], [], [], []];
@@ -58,7 +53,6 @@ export function findScreen(img) {
 	}
 	if (!dev) return null;
 	const dw = dev.x1 - dev.x0, dh = dev.y1 - dev.y0;
-	// Filling the capture: a near-black bezel inside a lighter rim, on all 4 sides
 	const walk = (pts) => { let i = 0; while (i < pts.length && !on(...pts[i])) i++; const lim = Math.min(pts.length, i + Math.round(pts.length * 0.25)); let best = null;
 		for (let a = i; a < lim;) { const c = at(...pts[a]); let b = a + 1; while (b < lim && (dist(at(...pts[b]), c) < 0.03 || (fill && Math.max(c[0], at(...pts[b])[0]) < 0.1))) b++;
 			if (b - a >= 2 && c[0] < (fill ? 0.12 : 0.3) && (!fill || pts.slice(Math.max(0, a - 3), a).some((q) => at(...q)[0] > c[0] + 0.1)) && (!best || c[0] < best.L - 0.02)) best = { s: a, e: b, L: c[0] };
@@ -80,14 +74,12 @@ export function findScreen(img) {
 	return { x: Math.round(x), y: Math.round(y), w: Math.round(xr - x + 1), h: Math.round(yb - y + 1) };
 }
 
-// Source chrome is not design
 const rgbAt = (img, x, y) => { const k = (y * img.w + x) * 4; return [img.d[k], img.d[k + 1], img.d[k + 2]]; };
 const near = (p, c, t = 14) => Math.abs(p[0] - c[0]) <= t && Math.abs(p[1] - c[1]) <= t && Math.abs(p[2] - c[2]) <= t;
 const medianRGB = (ps) => [0, 1, 2].map((c) => ps.map((p) => p[c]).sort((a, b) => a - b)[ps.length >> 1]);
 const rowOf = (img, y, x0 = 0, x1 = img.w) => { const o = []; for (let x = x0; x < x1; x++) o.push(rgbAt(img, x, y)); return o; };
 const colOf = (img, x, y0 = 0, y1 = img.h) => { const o = []; for (let y = y0; y < y1; y++) o.push(rgbAt(img, x, y)); return o; };
 const shareNear = (ps, c) => ps.filter((p) => near(p, c)).length / (ps.length || 1);
-// A presentation backdrop
 export function findBackdrop(img) {
 	const { w, h } = img, t = Math.max(2, Math.round(Math.min(w, h) * 0.01)), sides = [[], [], [], []];
 	for (let k = 0; k < t; k++) { sides[0].push(...rowOf(img, k)); sides[1].push(...rowOf(img, h - 1 - k)); sides[2].push(...colOf(img, k)); sides[3].push(...colOf(img, w - 1 - k)); }
@@ -106,7 +98,6 @@ export function findBackdrop(img) {
 	if (o > (w * h - bw * bh) * 0.05) return null;
 	return { x: x0, y: y0, w: bw, h: bh };
 }
-// A credit bar: a uniform band at the bottom
 export function findCreditBar(img) {
 	const { w, h } = img, tall = h > w * 1.6, m = Math.max(2, Math.round(w * 0.02));
 	for (const side of ['bottom']) {
@@ -126,7 +117,6 @@ export function findCreditBar(img) {
 	}
 	return null;
 }
-// A screen-recording frame
 const lumOf = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 export function findRecordingFrame(img) {
 	const { w, h } = img, line = (side, k) => (side === 'top' ? rowOf(img, k) : side === 'bottom' ? rowOf(img, h - 1 - k) : side === 'left' ? colOf(img, k) : colOf(img, w - 1 - k));
@@ -138,7 +128,6 @@ export function findRecordingFrame(img) {
 		if (d < 2 || d > 8) continue;
 		const k = lines(side, d, 2), inner = medianRGB(mid(line(side, k)));
 		if (lumOf(inner) <= 40) continue; // a dark page running to the edge, not a frame
-		// Rounded: just inside the edge
 		const y = (j) => (side === 'bottom' ? h - 1 - k - j : k + j), round = [0, w - 1].some((x) => { let n = 0; for (let j = 0; j < 14 && y(j) >= 0 && y(j) < h; j++) if (Math.abs(lumOf(rgbAt(img, x, y(j))) - lumOf(rgbAt(img, w >> 1, y(j)))) > 30) n++; return n >= 3; });
 		if (round) { dark = { side, px: k }; break; }
 	}
@@ -149,7 +138,6 @@ export function findRecordingFrame(img) {
 	cut[dark.side] = dark.px;
 	return { cut, box: { x: cut.left, y: cut.top, w: w - cut.left - cut.right, h: h - cut.top - cut.bottom } };
 }
-// A mouse cursor left in a screen recording: a small arrow
 export function findCursors(img) {
 	const { w, h } = img, n = w * h, Y = new Float32Array(n), W1 = w + 1, I = new Float64Array(W1 * (h + 1)), out = [];
 	for (let i = 0; i < n; i++) Y[i] = lumOf([img.d[i * 4], img.d[i * 4 + 1], img.d[i * 4 + 2]]);
@@ -170,7 +158,6 @@ export function findCursors(img) {
 			const p = hi.findIndex((v) => v >= x1 - 1); if (p < bh * 0.3 || p > bh * 0.85) continue; // widest past the first third
 			const slack = Math.max(2, bw * 0.25); let off = 0; for (let r = 0; r <= p; r++) if (Math.abs(hi[r] - x0 - (r / p) * (bw - 1)) > slack) off++; if (off) continue;
 			const tail = Math.max(2, Math.round(bh * 0.15)); if (lo.slice(bh - tail).some((v) => v - x0 < bw * 0.25)) continue; // the tail, to the right
-			// Two tones, as a cursor is drawn
 			const inC = new Set(px); let hol = 0, holN = 0, holY = 0, inkY = 0, ring = 0, ringN = 0;
 			for (const i of px) inkY += Y[i];
 			for (let r = Math.floor(bh * 0.15); r < Math.ceil(bh * 0.6); r++) for (let x = lo[r] + 1; x < hi[r]; x++) { const i = (y0 + r) * w + x; holN++; if (!inC.has(i)) { hol++; holY += Y[i]; } }
@@ -184,7 +171,6 @@ export function findCursors(img) {
 	}
 	return out.slice(0, 3);
 }
-// The trims in turn: the backdrop, a recording frame, a credit bar
 export function trimChrome(img, k = 1) {
 	let box = { x: 0, y: 0, w: img.w, h: img.h }; const cut = [], P = (v) => `${Math.round(v * k)}px`;
 	const b = findBackdrop(img);
@@ -200,7 +186,6 @@ export function trimChrome(img, k = 1) {
 	return { box: cut.length ? box : null, cut };
 }
 
-// Photo blocks: many colours, none of them ruling
 export function photoMask(img, lab) {
 	const bs = Math.max(8, Math.round(Math.max(img.w, img.h) / 50)), cw = Math.floor(img.w / bs), ch = Math.floor(img.h / bs), m = new Uint8Array(cw * ch);
 	for (let by = 0; by < ch; by++) for (let bx = 0; bx < cw; bx++) {
@@ -211,11 +196,9 @@ export function photoMask(img, lab) {
 	}
 	const near = (g, x, y) => { let c = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if ((dx || dy) && X >= 0 && Y >= 0 && X < cw && Y < ch && g[Y * cw + X]) c++; } return c; };
 	const step = (g, keep) => { const o = new Uint8Array(cw * ch); for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) o[y * cw + x] = keep(g[y * cw + x], near(g, x, y)) ? 1 : 0; return o; };
-	// Lone blocks are text fringes
 	const k = step(step(step(m, (v, c) => v && c >= 3), (v, c) => v || c >= 3), (v, c) => v && c >= 6);
 	return { cw, ch, bs, m: k, share: k.reduce((s, v) => s + v, 0) / (cw * ch || 1) };
 }
-// Dominant colours: k-means in OKLab, deterministic seeds
 function palette(lab, n, k = 6) {
 	const idx = []; for (let i = 0; i < n; i += 3) idx.push(i); const P = idx.map((i) => [lab.L[i], lab.A[i], lab.B[i]]);
 	const C = [P[0]]; while (C.length < k) { let best = P[0], bd = -1; for (const p of P) { const d = Math.min(...C.map((c) => dist(p, c))); if (d > bd) { bd = d; best = p; } } C.push(best); }
@@ -227,7 +210,6 @@ function palette(lab, n, k = 6) {
 	const w = new Array(k).fill(0); for (const a of as) w[a]++;
 	return C.map((c, i) => ({ lab: c, w: w[i] / P.length })).filter((c) => c.w > 0.01).sort((a, b) => b.w - a.w);
 }
-// Every number the comparison needs
 export function features(img, [vw, vh]) {
 	const W = Math.round(Math.sqrt(120000 * vw / vh)), H = Math.round(W * vh / vw), a = resize(img, W, H), lab = labOf(a);
 	const fit = (n) => { const k = Math.min(1, n / Math.max(img.w, img.h)); return k < 1 ? resize(img, Math.max(1, Math.round(img.w * k)), Math.max(1, Math.round(img.h * k))) : img; };
@@ -241,7 +223,6 @@ export function features(img, [vw, vh]) {
 	for (let c = 0; c < lum.length; c++) { lum[c] /= cnt[c] || 1; edge[c] /= cnt[c] || 1; }
 	return { size: [W, H], grid: [gw, gh], lum, edge, ink: ink / (W * H), palette: palette(lab, W * H), photo: mask.share };
 }
-// Structural similarity of two grids: 1 is the same pattern
 const ssim = (x, y, c) => { const n = x.length, mx = x.reduce((s, v) => s + v, 0) / n, my = y.reduce((s, v) => s + v, 0) / n; let cv = 0, vx = 0, vy = 0; for (let i = 0; i < n; i++) { cv += (x[i] - mx) * (y[i] - my); vx += (x[i] - mx) ** 2; vy += (y[i] - my) ** 2; } return (2 * cv / n + c) / ((vx + vy) / n + c); };
 export function paletteDE(p, q) {
 	const a = p.map((c) => c.w), b = q.map((c) => c.w), sa = a.reduce((s, v) => s + v, 0) || 1, sb = b.reduce((s, v) => s + v, 0) || 1, pairs = [];
@@ -249,7 +230,6 @@ export function paletteDE(p, q) {
 	let cost = 0; for (const [d, i, j] of pairs.sort((x, y) => x[0] - y[0])) { const m = Math.min(a[i], b[j]); if (m > 0) { cost += m * d; a[i] -= m; b[j] -= m; } }
 	return cost * 100;
 }
-// --diff: pixel match of two same-size images
 export const DIFF_TOL = 16;
 export function pixelDiff(a, b, tol = DIFF_TOL) {
 	const n = a.w * a.h, d = new Uint8ClampedArray(n * 4); let ok = 0;
@@ -260,7 +240,6 @@ export function pixelDiff(a, b, tol = DIFF_TOL) {
 	}
 	return { match: Math.round((ok / (n || 1)) * 1000) / 10, panel: { w: a.w, h: a.h, d } };
 }
-// Structure: pixels alone pass a black page on a dark, sparse hero
 const STRUCT = { reach: 2, flat: 0.004 };
 export function edgeMap(img) {
 	const { w, h } = img, n = w * h, Y = new Float32Array(n), B = new Float32Array(n), g = new Float32Array(n), m = new Float32Array(n), t = new Float32Array(n);
@@ -279,10 +258,8 @@ export function structureMatch(ea, eb, x, y, w, h, mask) {
 	const rec = sa ? ra / sa : 0, pre = sb ? rb / sb : 0;
 	return rec + pre ? Math.round(2000 * rec * pre / (rec + pre)) / 10 : 0;
 }
-// --diff regions: a 3 by 3 grid; DIFF: the dark tolerance, the edge weight
 export const DONE = { overall: 92, region: 85, structure: 60 }, DIFF = { dark: 8, darkLum: 64, edge: 4, at: 0.02 };
 const REGION_NAMES = ['top left', 'top', 'top right', 'middle left', 'middle', 'middle right', 'bottom left', 'bottom', 'bottom right'];
-// norm: edges at one contrast (a part after its fold)
 export function regionMatch(a, b, tol = DIFF_TOL, mask = null, norm = false) {
 	const xs = [0, 1, 2, 3].map((i) => Math.round(a.w * i / 3)), ys = [0, 1, 2, 3].map((i) => Math.round(a.h * i / 3)), out = [], ea = edgeMap(a), eb = edgeMap(b);
 	if (norm) { const mean = (e) => e.g.reduce((t, v) => t + v, 0) / e.g.length || 1, ma = mean(ea), mb = mean(eb); for (const [e, m] of [[ea, ma], [eb, mb]]) for (const k of ['g', 'm']) e[k] = e[k].map((v) => v * Math.sqrt(ma * mb) / m); }
@@ -293,7 +270,6 @@ export function regionMatch(a, b, tol = DIFF_TOL, mask = null, norm = false) {
 	}
 	return out;
 }
-// How far a region is from done, both numbers against their limits
 export const regionScore = (r) => Math.min(r.match - DONE.region, (r.structure ?? 100) - DONE.structure);
 export const MAX_SKIP = 3; // not scored: picture or floor-raised regions
 export function markSkips(regions, rects) {
@@ -306,13 +282,10 @@ export function markSkips(regions, rects) {
 	}
 	return regions;
 }
-// The pixel match over the scored regions only
 export function scoredMatch(regions) { const s = regions.filter((r) => !r.skip), a = s.reduce((t, r) => t + r.w * r.h, 0); return a ? Math.round(s.reduce((t, r) => t + r.match * r.w * r.h, 0) / a * 10) / 10 : 0; }
-// The lowest and the mean structure among the scored regions
 const sv = (regions) => regions.filter((r) => !r.skip && r.structure != null).map((r) => r.structure);
 export const minStructure = (regions) => { const v = sv(regions); return v.length ? Math.min(...v) : null; };
 export const meanStructure = (regions) => { const v = sv(regions); return v.length ? Math.round(v.reduce((s, x) => s + x, 0) / v.length * 10) / 10 : null; };
-// The done line: done, or what is short
 export function doneLine(match, regions, part = false) {
 	const all = regions; regions = all.filter((r) => !r.skip); const skipped = all.length - regions.length;
 	const low = regions.filter((r) => r.match < DONE.region).sort((p, q) => p.match - q.match), flat = regions.filter((r) => r.structure != null && r.structure < DONE.structure).sort((p, q) => p.structure - q.structure), short = [];
@@ -323,7 +296,6 @@ export function doneLine(match, regions, part = false) {
 	const left = skipped ? ` (${skipped} region${skipped > 1 ? 's' : ''} not scored: ${all.filter((r) => r.skip).map((r) => `${r.name} ${r.skip}`).join(', ')})` : '';
 	return short.length ? `Not done: ${short.join('; ')}. Fix the worst regions first (regions.jpg).` : `Done: ${part ? `every region >= ${DONE.structure} structure (a part is scored on structure, so it stays done in the hero's palette)` : `overall >= ${DONE.overall}%, every region >= ${DONE.region}% pixels and >= ${DONE.structure} structure`}${left}`;
 }
-// A phone status bar row: in the top 6 to 50 CSS px
 export function statusBarRow(img, k = 1) {
 	const { w } = img, y0 = Math.round(6 * k), y1 = Math.min(img.h, Math.round(50 * k)); if (y1 - y0 < 8 || w < 100) return false;
 	const II = lumIntegral(img), W1 = img.w + 1, r = Math.max(3, Math.round(7 * k)), col = new Uint8Array(w), inkRows = new Set();
@@ -350,7 +322,6 @@ export function dhash(II, x, y, bw, bh) {
 	return { bits, range: hi - lo };
 }
 export const hamming = (a, b) => { let n = 0; for (let i = 0; i < 64; i++) n += a[i] !== b[i]; return n; };
-// The closest same-size block of src.img to a hash
 export function findBlock(hash, bw, bh, src) {
 	let L = 0; while (L < 4 && Math.min(bw, bh) / 2 ** (L + 1) >= 24) L++;
 	src.lv = src.lv || []; if (!src.lv[L]) { const f = 2 ** L; src.lv[L] = { f, II: lumIntegral(L ? resize(src.img, Math.max(1, Math.round(src.img.w / f)), Math.max(1, Math.round(src.img.h / f))) : src.img) }; }
@@ -359,13 +330,11 @@ export function findBlock(hash, bw, bh, src) {
 	for (let y = 0; y + h <= II.h; y += step) for (let x = 0; x + w <= II.w; x += step) { const g = dhash(II, x, y, w, h); if (g.range < COPY.flat) continue; const d = hamming(hash.bits, g.bits); if (d <= COPY.bits && (!best || d < best.d)) best = { x: x * f, y: y * f, d }; }
 	return best;
 }
-// A copy: colours and edges agree too
 export function sameArt(a, b) {
 	const W = 128, H = Math.max(8, Math.round(W * a.h / a.w)), x = resize(a, W, H), y = resize(b, W, H), hist = (im) => { const o = new Float32Array(64); for (let i = 0; i < im.d.length; i += 4) o[(im.d[i] >> 6) * 16 + (im.d[i + 1] >> 6) * 4 + (im.d[i + 2] >> 6)] += 4 / im.d.length; return o; };
 	const hx = hist(x), hy = hist(y); let c = 0; for (let i = 0; i < 64; i++) c += Math.min(hx[i], hy[i]);
 	return { colour: Math.round(c * 100) / 100, structure: structureMatch(edgeMap(x), edgeMap(y), 0, 0, W, H) ?? 100 };
 }
-// arts: [{ sel, w, h, img }]; sources: [{ ref, img, c, nat }]
 export function copiedArt(arts, sources) {
 	const hits = [];
 	for (const a of arts) {
@@ -377,7 +346,6 @@ export function copiedArt(arts, sources) {
 export const imageryFar = (d, h) => Math.max(d, h) >= 0.12 && Math.min(d, h) < Math.max(d, h) * FAR.imagery;
 const ratioFar = (v, lim) => v != null && (v > lim || v < 1 / lim);
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
-// Draft against hero: scores 0 to 1 per axis
 export function compare(d, h, { draftType = null, heroType = null, pixel = null } = {}) {
 	const layout = Math.max(0, (ssim(d.lum, h.lum, 0.002) + ssim(d.edge, h.edge, 0.0005)) / 2, pixel == null ? 0 : (pixel - 50) / 50); // the --diff pixel match floors it
 	const paletteDE_ = paletteDE(d.palette, h.palette);
@@ -402,7 +370,6 @@ export function axisLines(scores, far, raw, detail = {}) {
 	];
 }
 
-// The draft's own numbers, in the page
 function DOM() {
 	const W = innerWidth, H = innerHeight, area = (r) => Math.max(0, Math.min(r.right, W) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, H) - Math.max(r.top, 0));
 	const S = 24, cells = new Uint8Array(S * S), mark = (r) => { for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) { const x = (i + 0.5) * W / S, y = (j + 0.5) * H / S; if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) cells[j * S + i] = 1; } };
@@ -417,7 +384,6 @@ function DOM() {
 	const body = [...byLen.entries()].filter(([px]) => px >= 12).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null, largest = T.reduce((m, e) => Math.max(m, e.px), 0) || null;
 	return { imageShare: cells.reduce((s, v) => s + v, 0) / (S * S), bodyPx: body, largestPx: largest, typeRatio: body && largest ? largest / body : null, textPer100k: Math.round(T.length / (W * H) * 1e6) / 10 };
 }
-// The page part a ref pairs with: sel:<css>, else data-part
 function PART({ part, selector }) {
 	if (selector) return document.querySelector(selector) ? selector : null;
 	const p = part.toLowerCase().trim(), slug = p.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), mark = (e) => { e.setAttribute('data-gb-part', slug); return `[data-gb-part="${slug}"]`; };
@@ -430,7 +396,6 @@ function PART({ part, selector }) {
 	if (slug === 'hero') { const e = boxes.find((b) => b.getBoundingClientRect().top < 120 && b.tagName !== 'HEADER' && b.tagName !== 'NAV'); return e ? mark(e) : 'viewport'; }
 	return null;
 }
-// --diff, in the page: the boxes left out of done
 function COVERS({ sel }) {
 	const root = sel ? document.querySelector(sel) : null, o = root ? root.getBoundingClientRect() : { left: 0, top: 0 }, out = [];
 	for (const [kind, q] of [['picture', 'img,picture,video,canvas,[data-sample-image]'], ['floor-raised', '[data-floor-raised]']]) for (const e of (root || document.body).querySelectorAll(q)) {
@@ -439,15 +404,12 @@ function COVERS({ sel }) {
 	}
 	return out;
 }
-// --diff, in the page: does the top 48px show a time?
 function TIME() {
 	const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), rg = document.createRange();
 	for (let n = tw.nextNode(); n; n = tw.nextNode()) { if (!/(^|\D)([01]?\d|2[0-3])[:.][0-5]\d(\D|$)/.test(n.nodeValue)) continue; rg.selectNodeContents(n); const r = rg.getBoundingClientRect(); if (r.width >= 1 && r.top < 48 && r.bottom > 0) return true; }
 	return false;
 }
-// A part's box in CSS px, or null
 function BOX(sel) { const e = document.querySelector(sel), r = e?.getBoundingClientRect(); return r && r.width >= 1 && r.height >= 1 ? { w: Math.round(r.width), h: Math.round(r.height) } : null; }
-// Copied art, in the page: every picture
 function ARTS({ min }) {
 	const name = (e) => { const p = []; for (let a = e; a && a !== document.body && p.length < 3; a = a.parentElement) { const c = (a.getAttribute('class') || '').trim(); p.unshift(a.localName + (a.id ? '#' + a.id : '') + (c ? '.' + c.split(/\s+/)[0] : '')); if (a.id) break; } return p.join(' > '); };
 	const out = [];
@@ -460,7 +422,6 @@ function ARTS({ min }) {
 	}
 	return out.sort((a, b) => b.w * b.h - a.w * a.h).slice(0, 24).map((a, i) => { a.e.setAttribute('data-gb-art', String(i)); return { i, sel: a.sel, w: a.w, h: a.h }; });
 }
-// In a blank page: decode an image to RGBA
 async function DECODE({ src, max }) {
 	const img = new Image(); img.src = src; await img.decode(); const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
 	const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k)), c = Object.assign(document.createElement('canvas'), { width: w, height: h }), x = c.getContext('2d', { willReadFrequently: true });
@@ -486,7 +447,6 @@ async function SHEET({ rows, foot }) {
 	x.font = '500 16px ui-monospace,monospace'; for (const l of foot) { x.fillText(l, pad, y + 16); y += 24; }
 	return c.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
-// In a blank page: the --diff sheet
 async function DIFFSHEET({ panels, labels, foot }) {
 	const pad = 24, gap = 24, lab = 30, W = panels.reduce((s, p) => s + p.w, 0) + gap * (panels.length - 1) + pad * 2, H = Math.max(...panels.map((p) => p.h)) + lab + pad * 2 + 24;
 	const c = Object.assign(document.createElement('canvas'), { width: W, height: H }), x = c.getContext('2d'); x.fillStyle = '#d9dadc'; x.fillRect(0, 0, W, H); x.fillStyle = '#1b1b1b'; x.font = '600 18px system-ui,sans-serif';
@@ -499,13 +459,11 @@ async function DIFFSHEET({ panels, labels, foot }) {
 	return c.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 
-// In a blank page: one box of an image at its own pixels, as PNG
 async function CROPPNG({ src, box }) {
 	const img = new Image(); img.src = src; await img.decode(); const b = box || { x: 0, y: 0, w: img.naturalWidth, h: img.naturalHeight };
 	const c = Object.assign(document.createElement('canvas'), { width: b.w, height: b.h }); c.getContext('2d').drawImage(img, -b.x, -b.y);
 	return c.toDataURL('image/png').split(',')[1];
 }
-// In a blank page: regions.jpg
 async function REGIONSHEET({ rows }) {
 	const pad = 24, gap = 24, lab = 30, toCanvas = (p) => { const raw = atob(p.b64), d = new Uint8ClampedArray(raw.length); for (let k = 0; k < raw.length; k++) d[k] = raw.charCodeAt(k); const c = Object.assign(document.createElement('canvas'), { width: p.w, height: p.h }); c.getContext('2d').putImageData(new ImageData(d, p.w, p.h), 0, 0); return c; };
 	const R = rows.map((r) => { const z = Math.max(1, Math.min(3, 820 / r.a.w, 640 / r.a.h)); return { ...r, z, W: Math.round(r.a.w * z), H: Math.round(r.a.h * z) }; });
@@ -517,7 +475,6 @@ async function REGIONSHEET({ rows }) {
 }
 
 const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', svg: 'image/svg+xml' };
-// An image as a data URL, in memory: http fetched, file
 export async function imageData(src) {
 	if (/^https?:/i.test(src)) {
 		const r = await fetch(src, { signal: AbortSignal.timeout(20000), headers: { accept: 'image/*' } }); if (!r.ok) throw new Error(`HTTP ${r.status} for ${src}${r.status === 401 || r.status === 403 ? ': the host refuses scripts; never work around it, copy it by eye' : ''}`);
@@ -528,7 +485,6 @@ export async function imageData(src) {
 	const p = /^file:/i.test(src) ? fileURLToPath(src) : resolve(src), ext = p.split('.').pop().toLowerCase();
 	return `data:${MIME[ext] || 'image/png'};base64,${readFileSync(p).toString('base64')}`;
 }
-// "part=url,part=sel:<css>|url" or a .json file of [{ part
 export function parseRefs(v) {
 	if (!v) return [];
 	if (/\.json$/i.test(v) && existsSync(v)) return JSON.parse(readFileSync(v, 'utf8')).map((r) => ({ part: String(r.part), selector: r.selector || null, url: String(r.url) }));
@@ -537,7 +493,6 @@ export function parseRefs(v) {
 		return m ? { part, selector: m[1].trim(), url: m[2].trim() } : { part, selector: null, url: rest };
 	});
 }
-// A typeScale such as "56/32/20/16/14"
 export function typeRatio(v) {
 	const n = String(v ?? '').match(/\d+(?:\.\d+)?/g)?.map(Number).filter((x) => x > 0) ?? [];
 	if (n.length === 1) return n[0] >= 1 && n[0] <= 12 ? n[0] : null;
@@ -567,7 +522,6 @@ async function main() {
 	if (cropArg && cropArg !== 'none') { const n = cropArg.split(',').map(Number); if (n.length !== 4 || n.some((v) => !(v >= 0))) usage(`${cf} takes x,y,w,h in the image px (or fractions of it), or none`); const rs = sizeOf(rsArg) || [heroImg.nw, heroImg.nh], k = n.every((v) => v <= 1) ? [heroImg.w, heroImg.h] : [heroImg.w / rs[0], heroImg.h / rs[1]]; heroCrop = { x: n[0] * k[0], y: n[1] * k[1], w: n[2] * k[0], h: n[3] * k[1] }; cropWhy = cf; }
 	else if (cropArg !== 'none') { const s = findScreen(heroImg.w > 1600 ? resize(heroImg, 1600, Math.round(heroImg.h * 1600 / heroImg.w)) : heroImg); if (s) { const k = heroImg.w > 1600 ? heroImg.w / 1600 : 1; heroCrop = { x: s.x * k, y: s.y * k, w: s.w * k, h: s.h * k }; cropWhy = `device screen found (pass ${cf} none to keep the whole image)`; } }
 	const heroNat = heroImg.nw / heroImg.w;
-	// Source chrome is not design
 	let trimmed = noTrim ? 'off (--no-trim)' : cropWhy === cf ? `the ${cf} box` : cropWhy.startsWith('device') ? 'device bezel (cut to the screen)' : cropArg === 'none' ? `nothing (${cf} none)` : 'nothing (no credit bar or backdrop found)', trim = [];
 	if (!noTrim && !heroCrop && cropArg !== 'none') { const t = trimChrome(heroImg, heroNat); if (t.box) { heroCrop = t.box; trim = t.cut; trimmed = t.cut.join('; '); cropWhy = `trimmed ${trimmed}`; } }
 	if (heroCrop) heroImg = crop(heroImg, heroCrop.x, heroCrop.y, heroCrop.w, heroCrop.h);
@@ -575,7 +529,6 @@ async function main() {
 	writeFileSync(trimmedFile, Buffer.from(await blank.evaluate(CROPPNG, { src: heroSrc, box: natBox }), 'base64'));
 	const cursors = noTrim ? [] : findCursors(heroImg.w > 1600 ? resize(heroImg, 1600, Math.round(heroImg.h * 1600 / heroImg.w)) : heroImg).map((c) => { const q = (heroImg.w > 1600 ? heroImg.w / 1600 : 1) * heroNat; return { x: Math.round(c.x * q), y: Math.round(c.y * q), w: Math.round(c.w * q), h: Math.round(c.h * q) }; });
 	const trimLine = `trimmed: ${trimmed}${cursors.map((c) => `; cursor at ${c.x},${c.y} (leave it out)`).join('')}. Copy from ${trimmedFile} (${natBox ? `${natBox.w}x${natBox.h}` : `${heroImg.nw}x${heroImg.nh}`} px; local only, never upload it).`;
-	// The viewport: --viewport
 	const ar = heroImg.w / heroImg.h, natW = heroImg.w * heroNat, phone = cropWhy.startsWith('device') || (ar < 0.6 && !(natW >= 1000 && (ar < 0.42 || ar > 0.5)));
 	const tvs = (Array.isArray(tokens?.viewports) ? tokens.viewports : [tokens?.viewports]).flatMap((x) => String(x || '').split(',')).map(sizeOf).filter(Boolean).sort((a, b) => a[0] - b[0]);
 	const vp = vpArg ? sizeOf(vpArg) : tvs.length ? (phone ? tvs[0] : tvs[tvs.length - 1]) : phone ? [390, 844] : [1440, 900];
@@ -598,7 +551,6 @@ async function main() {
 			const dp = await open(dpr); covers = await dp.evaluate(COVERS, { sel: null }); hasTime = await dp.evaluate(TIME);
 			shotSrc = 'data:image/png;base64,' + (await dp.screenshot({ type: 'png' })).toString('base64');
 		}
-		// At the hero's own pixels when it is the smaller: never upscale it
 		let dImg = await decode(shotSrc, 16000), H, band = 0;
 		const cw = part ? box.w : vw, W = Math.min(part ? dImg.w : vw * dpr, heroImg.w), f = W / cw, hs = Math.round(cw * dpr / heroImg.w * 100) / 100, sz = (im) => (im.w === W ? im : resize(im, W, Math.max(1, Math.round(im.h * W / im.w))));
 		let hImg = sz(heroImg); dImg = sz(dImg);
@@ -620,7 +572,6 @@ async function main() {
 		const rows = worst.map((r) => ({ label: `${r.name}: ${r.match}% pixels, structure ${r.structure ?? '-'}   ${part ? 'ref' : 'hero'} | draft`, a: crop(hImg, r.x, r.y, r.w, r.h), b: crop(dImg, r.x, r.y, r.w, r.h) })).map((r) => ({ ...r, a: { w: r.a.w, h: r.a.h, b64: b64(r.a) }, b: { w: r.b.w, h: r.b.h, b64: b64(r.b) } }));
 		if (rows.length) writeFileSync(rfile, Buffer.from(await blank.evaluate(REGIONSHEET, { rows }), 'base64'));
 		await browser.close();
-		// A part keeps its best run: done first, then pixels
 		const now = { pixel, structure: meanStructure(regions), structureMin: minStructure(regions), done: done.startsWith(P + 'Done'), shot }, runs = (prev?.runs || 0) + 1;
 		const rec = { v: 1, tool: 'gb-fidelity', mode: part ? 'part' : 'diff', ...(part ? { part, sel: selArg, ref: hero, box, noRefBand: Math.round(band / f) } : { hero }), ...now, run: runs, size: [W, H], viewport: `${vw}x${vh}`, dpr, heroScale: hs, cssPerHeroPx, tolerance: DIFF_TOL, weights: DIFF, pixelMatch: match, regions, notScored: skipped.map((r) => ({ name: r.name, kind: r.skip })), limits: { ...DONE, maxNotScored: MAX_SKIP }, trimmed: trim, cursors, warns: warns.map((w) => w.split(':')[0].slice(5)), crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([q, v]) => [q, Math.round(v)])) : null, ms: Date.now() - t0 };
 		const best = part && prev && (prev.done !== now.done ? prev.done : prev.structure > now.structure) ? prev : rec;
@@ -637,7 +588,6 @@ async function main() {
 		if (part) console.log(`${P}best run ${best.run} kept: pixel ${best.pixel}, structure ${best.structure} (the mean of the scored regions, lowest ${best.structureMin}), done ${best.done}; send these from ${jf} as fidelity.parts${best !== rec ? `. This run ${runs} scored ${pixel}%: go back to run ${best.run}'s code` : ''}`);
 		return;
 	}
-	// The same first screen as --diff
 	let heroCut = false; const heroFull = heroImg, ch = Math.round(heroImg.w * vp[1] / vp[0]);
 	if (heroImg.h > ch + 1) { heroImg = crop(heroImg, 0, 0, heroImg.w, ch); heroCrop = { x: heroCrop?.x ?? 0, y: heroCrop?.y ?? 0, w: heroImg.w, h: ch }; heroCut = true; cropWhy = (heroCrop && cropWhy !== 'whole image' ? cropWhy + ', ' : '') + 'cut to its first screen'; }
 	let draftImg, dom = null, page = null, draftSrc, arts = [];
@@ -647,7 +597,6 @@ async function main() {
 		try { await page.goto(u.href, { waitUntil: 'load', timeout: 30000 }); await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {}); } catch (e) { await browser.close(); console.log(`FAIL draft-unreadable: ${String(e.message || e).split('\n')[0]}`); process.exit(0); }
 		await page.evaluate(() => document.fonts?.ready).catch(() => {}); await page.waitForTimeout(500);
 		const png = await page.screenshot({ type: 'png' }); draftSrc = 'data:image/png;base64,' + png.toString('base64'); draftImg = await decode(draftSrc, 4000); dom = await page.evaluate(DOM);
-		// Copied art: each picture
 		arts = await page.evaluate(ARTS, { min: COPY.min }).catch(() => []);
 		for (const a of arts) { const shot = await page.locator(`[data-gb-art="${a.i}"]`).screenshot({ type: 'png', timeout: 5000 }).catch(() => null); if (shot) a.img = await decode('data:image/png;base64,' + shot.toString('base64'), 4000); }
 	}
@@ -656,7 +605,6 @@ async function main() {
 	const fd = features(draftImg, shape), fh = features(heroImg, shape), { scores, far, raw } = compare(fd, fh, { draftType, heroType, pixel });
 	const detail = { draft: { imageShare: r2(fd.photo), domImageShare: dom ? r2(dom.imageShare) : null, typeRatio: r2(draftType), bodyPx: dom?.bodyPx ?? null, largestPx: dom?.largestPx ?? null, ink: r2(fd.ink * 1000), textPer100k: dom?.textPer100k ?? null, ground: fd.palette[0] ? hexOf(fd.palette[0].lab) : null },
 		hero: { imageShare: r2(fh.photo), typeRatio: r2(heroType), typeFrom: heroType ? (heroTypeArg ? '--hero-type' : tokens?.craft?.spec?.typeScale ? 'tokens craft.spec.typeScale' : 'tokens typeScale') : null, ink: r2(fh.ink * 1000), ground: fh.palette[0] ? hexOf(fh.palette[0].lab) : null, size: [heroImg.w, heroImg.h], crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([k, v]) => [k, Math.round(v * heroNat)])) : null, cut: heroCut, cropWhy, trimmed: trim } };
-	// Section and region pairs
 	const pairs = [];
 	for (const r of refs) {
 		const row = { part: r.part, url: r.url, selector: r.selector || null };
