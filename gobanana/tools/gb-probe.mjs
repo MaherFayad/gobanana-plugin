@@ -1,10 +1,10 @@
-// gb-tools v11: the core fetch line's tag.
-// node gb-probe.mjs <url> <outdir>: each keyboard stop at 390 (ring, label, covered) and page.under44 (tap targets)
+// gb-tools v12: the fetch tag.
+// node gb-probe.mjs <url|file.html> <outdir>: each keyboard stop at 390 (ring, label, covered) and page.under44 (tap targets)
 import { guard } from './gb-guard.mjs';
-import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { join } from 'node:path';
+import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';
 const req = createRequire(import.meta.url); let pw; try { pw = req('playwright'); } catch { pw = createRequire(join(execSync('npm root -g').toString().trim(), '_'))('playwright'); }
 const { chromium } = pw;
-const [url, out = '.'] = process.argv.slice(2); const tag = new URL(url).searchParams.get('lang') || 'page';
+let [url, out = '.'] = process.argv.slice(2); if (!/^[a-z]{2,}:/i.test(url)) url = pathToFileURL(resolve(url)) + '?shot=1'; const tag = new URL(url).searchParams.get('lang') || 'page';
 const b = guard(await chromium.launch()), r = {};
 let p = await b.newPage({ viewport: { width: 320, height: 568 } });
 await p.goto(url); await p.waitForTimeout(800);

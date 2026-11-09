@@ -1,7 +1,7 @@
-// gb-tools v11: the core fetch line's tag.
-// gb-inventory: how many colours, sizes, spacings and radii a live page really uses, which are near duplicates, and a tidy set made only from them. Computed styles only, no AI.
+// gb-tools v12: the fetch tag.
+// gb-inventory: the colours, sizes, spacings and radii a live page uses, near duplicates, and a tidy set. No AI.
 //   node gb-inventory.mjs <url|file.html> [more] [--viewport 390x844] [--out dir] [--json]
-//   Writes <out>/inventory.json and inventory.md (default out: $TMPDIR/gb/inventory). Exit 0 done, 1 a page did not load, 2 usage, 3 this machine cannot render.
+//   Writes <out>/inventory.json and inventory.md. Exit 0 done, 1 a page failed, 2 usage, 3 cannot render.
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url';

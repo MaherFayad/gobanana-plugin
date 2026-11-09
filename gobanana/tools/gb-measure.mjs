@@ -1,10 +1,10 @@
-// gb-tools v11: the core fetch line's tag.
+// gb-tools v12: the fetch tag.
 // gb-measure: a draft's accessibility floor and content honesty at the brief's viewports, FAIL and WARN.
-//   node gb-measure.mjs <file.html|url> [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--subject words|none] [--json]
-// Flags and checks: measure-script. No style budgets, the look is the hero's.
+//   node gb-measure.mjs <file.html|url> [--lint] [--data worst] [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--subject words|none] [--json]
+// Flags and checks: measure-script.
 // Adapted from taste-skill scripts/inspect.mjs and scripts/lib/rules.mjs (MIT, github.com/Leonxlnx/taste-skill).
 import { guard } from './gb-guard.mjs';
-import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module'; import { execSync, spawnSync } from 'node:child_process'; import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve, join } from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url'; import { inflateSync } from 'node:zlib';
 
 const args = process.argv.slice(2);
@@ -17,11 +17,11 @@ const langGiven = langArg.length > 0 || !!tokens?.primaryLanguage || tokenLangs.
 let languages = [...new Set(langArg.length ? langArg : [String(tokens?.primaryLanguage || tokenLangs[0] || 'en').toLowerCase()])];
 const ta = []; for (let v; (v = opt('taste-allows')) !== null;) ta.push(v);
 const allow = [...list(ta.join(',')), ...(Array.isArray(tokens?.tasteAllows) ? tokens.tasteAllows.map(String) : [])];
-flag('work'); flag('phone'); const asJson = flag('json');
+flag('work'); flag('phone'); const asJson = flag('json'), lint = flag('lint'), dv = opt('data');
 const landing = flag('landing') || tokens?.landing === true;
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 const roughDir = opt('rough'), rough = roughDir !== null, vpArg = []; for (let v; (v = opt('viewport')) !== null;) vpArg.push(v);
-const stateIds = rough ? [] : list(opt('states')).map(kebab).filter((s) => !/^(default|idle|hover|focus|focus-visible|active|pressed|moving|dragging)$/.test(s)), target = args[0];
+const stateIds = rough ? [] : list(opt('states')).map(kebab).filter((s) => !/^(default|idle|hover|focus|focus-visible|active|pressed|moving|dragging)$/.test(s)), target = args[0] && args[0] + (dv ? '?data=' + dv : '');
 const usage = () => { console.error('usage: node gb-measure.mjs <file.html|url> | --rough <out-dir> a.html ...; every flag: the comment at the top of this file'); process.exit(2); };
 if ((rough && (!roughDir || roughDir.startsWith('--') || !args.length)) || (!target && !languages.every((l) => urlFor[l]))) usage();
 const nearTokens = (src) => { try { if (/^https?:/.test(src)) return null; const fp = src.startsWith('file:') ? fileURLToPath(src.split('?')[0]) : resolve(src.split('?')[0]); return JSON.parse(readFileSync(join(dirname(fp), 'tokens.json'), 'utf8')); } catch { return null; } };
@@ -535,14 +535,15 @@ if (rough) {
 	process.exit(bad ? 1 : 0);
 }
 
+const extra = (() => { try { const q = String(target || '').split('?')[1]; return q ? [...new URLSearchParams(q)].filter(([k]) => !/^(lang|shot)$/.test(k)).map(([k, v]) => `-${k}-${v}`).join('').replace(/[^\w-]/g, '') : ''; } catch { return ''; } })();
+const jsonPath = join(resolve(outDir || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), `measure${extra}.json`);
+if (lint && !extra && fileOf(target)) spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'gb-lint.mjs'), fileOf(target), ...(tp ? ['--tokens', tp] : []), '--fix', '--measure-dir', dirname(jsonPath)], { stdio: [0, 2, 2] });
 if (!langGiven && target) { const l = await firstLang(target); if (l) languages = [l]; }
 for (const lang of languages) for (const [w, h] of viewports) runs.push({ lang, w, h, reduce: false });
 runs.push({ lang: languages[0], w: mainW, h: mainH, reduce: true });
 for (const state of stateIds) for (const [w, h] of viewports) runs.push({ lang: languages[0], w, h, reduce: false, state });
 for (const r of runs) report.push(await measureRun(r, target));
 await browser.close();
-const extra = (() => { try { const q = String(target || '').split('?')[1]; return q ? [...new URLSearchParams(q)].filter(([k]) => !/^(lang|shot)$/.test(k)).map(([k, v]) => `-${k}-${v}`).join('').replace(/[^\w-]/g, '') : ''; } catch { return ''; } })();
-const jsonPath = join(resolve(outDir || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), `measure${extra}.json`);
 const { findings, measure, fails } = summarize(report, target, languages, jsonPath, false);
 if (asJson) console.log(JSON.stringify(report, null, 1));
 else {

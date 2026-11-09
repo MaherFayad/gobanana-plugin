@@ -1,8 +1,8 @@
-// gb-tools v11: the core fetch line's tag.
-// gb-lint: motion, phone and 14px floor checks. node gb-lint.mjs <file.html> [--fix] [--measure-dir <dir>] (lint-<rule> ids into measure.json)
+// gb-tools v12: the fetch tag.
+// gb-lint: motion, phone and 14px floor checks. node gb-lint.mjs <file.html> [--fix] [--measure-dir <dir>]
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"; import { join, resolve } from "node:path";
 const argv = process.argv.slice(2), ti = argv.indexOf("--tokens"), mi = argv.indexOf("--measure-dir"), file = argv.find((a, i) => !a.startsWith("--") && (ti < 0 || i !== ti + 1) && (mi < 0 || i !== mi + 1));
-if (!file || (mi >= 0 && !argv[mi + 1])) { console.error("usage: node gb-lint.mjs <file.html> [--tokens tokens.json] [--fix] [--measure-dir <dir>]"); process.exit(2); }
+if (!file || (mi >= 0 && !argv[mi + 1])) { console.error("usage: the comment at the top of this file"); process.exit(2); }
 let src = readFileSync(file, "utf8");
 const styleText = (s) => (/<style/i.test(s) ? [...s.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((m) => m[1]).join("\n") : s);
 if (argv.includes("--fix")) {

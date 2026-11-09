@@ -1,4 +1,4 @@
-// gb-tools v11: the core fetch line's tag.
+// gb-tools v12: the fetch tag.
 // gb-compare: do a board's drafts look alike? Each at 1440x900 (default view, &shot=1) in its one language.
 //   node gb-compare.mjs <a.html|url> <b.html|url> [more] [--tokens a.json[,b.json...]] [--languages en] [--same-direction] [--out dir] [--json]
 import { guard } from './gb-guard.mjs';

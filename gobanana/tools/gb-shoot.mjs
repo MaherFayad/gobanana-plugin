@@ -1,4 +1,4 @@
-// gb-tools v11: the core fetch line's tag.
+// gb-tools v12: the fetch tag.
 // gb-shoot: every render-loop shot in one browser in one language; states with --states; upload-<lang>-full.jpg for the board.
 //   node gb-shoot.mjs <file.html|url> [more pages: each to <out>/<name>] [--out dir] [--tokens t.json] [--languages en] [--viewport 390x844] [--states a,b] [--no-worst] [--landing] [--variants 3]
 import { guard } from './gb-guard.mjs';

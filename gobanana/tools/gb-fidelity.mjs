@@ -1,4 +1,4 @@
-// gb-tools v11: the core fetch line's tag.
+// gb-tools v12: the fetch tag.
 // gb-fidelity: a draft against its hero, pixels and the DOM only, no AI; the hero and refs are read in memory
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -289,7 +289,7 @@ export const meanStructure = (regions) => { const v = sv(regions); return v.leng
 export function doneLine(match, regions, part = false) {
 	const all = regions; regions = all.filter((r) => !r.skip); const skipped = all.length - regions.length;
 	const low = regions.filter((r) => r.match < DONE.region).sort((p, q) => p.match - q.match), flat = regions.filter((r) => r.structure != null && r.structure < DONE.structure).sort((p, q) => p.structure - q.structure), short = [];
-	if (skipped > MAX_SKIP) short.push(`${skipped} regions not scored, at most ${MAX_SKIP} of 9`);
+	if (skipped > MAX_SKIP && !flat.length) return `Not scorable: ${regions.length} of 9 regions scored (text and pictures are not): check diff.jpg by eye, go to step 2 and name it in the reply.`;
 	if (match < DONE.overall && !part) short.push(`overall ${match}% (needs ${DONE.overall}%)`);
 	if (low.length && !part) short.push(`${low.length} region${low.length > 1 ? 's' : ''} under ${DONE.region}% pixels, worst ${low.slice(0, 3).map((r) => `${r.name} ${r.match}%`).join(', ')}`);
 	if (flat.length) short.push(`${flat.length} region${flat.length > 1 ? 's' : ''} under ${DONE.structure} structure (edges not where the hero has them), worst ${flat.slice(0, 3).map((r) => `${r.name} ${r.structure}`).join(', ')}`);
@@ -591,7 +591,7 @@ async function main() {
 		console.log(`The draft's ${part ? `${selArg} box (${box.w}x${box.h} CSS px)` : 'first screen'} at ${at} against the ${part ? `ref for ${part}` : 'hero'} (${cropWhy}); a pixel matches when every channel is within ${DIFF_TOL} (${DIFF.dark} on dark), edge pixels count ${DIFF.edge}x. Look at ${file}${rows.length ? ` and ${rfile} (the ${rows.length} worst regions)` : ''}, local only: never upload them.`);
 		for (const w of warns) console.log(w);
 		console.log(done);
-		if (!part && !now.done) console.log(runs >= 2 ? `Run ${runs}: stop the copy here and go to step 2 (at most 2 step 1 runs); name what is short in the reply.` : 'Run 1 of 2: fix the worst regions first (regions.jpg), then run once more.');
+		if (!part && !now.done && !done.includes('Not scorable')) console.log(runs >= 2 ? `Run ${runs}: stop the copy here and go to step 2 (at most 2 step 1 runs); name what is short in the reply.` : 'Run 1 of 2: fix the worst regions first (regions.jpg), then run once more.');
 		if (part) console.log(`${P}best run ${best.run} kept: pixel ${best.pixel}, structure ${best.structure} (the mean of the scored regions, lowest ${best.structureMin}), done ${best.done}; send these from ${jf} as fidelity.parts${best !== rec ? `. This run ${runs} scored ${pixel}%: go back to run ${best.run}'s code` : ''}`);
 		return;
 	}
