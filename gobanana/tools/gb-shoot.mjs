@@ -1,6 +1,6 @@
-// gb-tools v12: the fetch tag.
+// gb-tools v13: the fetch tag.
 // gb-shoot: every render-loop shot in one browser in one language; states with --states; upload-<lang>-full.jpg for the board.
-//   node gb-shoot.mjs <file.html|url> [more pages: each to <out>/<name>] [--out dir] [--tokens t.json] [--languages en] [--viewport 390x844] [--states a,b] [--no-worst] [--landing] [--variants 3]
+//   node gb-shoot.mjs <file.html|url> [more pages: each to <out>/<name>] [--out dir] [--tokens t.json] [--languages en] [--viewport 390x844] [--states a,b] [--no-worst] [--landing]
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync, spawnSync } from 'node:child_process'; import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path'; import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -16,7 +16,7 @@ let languages = [...new Set(langArg.length ? langArg : [String(tokens?.primaryLa
 const noWorst = flag('no-worst'), landing = flag('landing') || tokens?.landing === true;
 const out = resolve(opt('out') || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), asked = opt('lang');
 const vpArg = []; for (let v; (v = opt('viewport')) !== null;) vpArg.push(v);
-const variants = Number(opt('variants') || 0), statesArg = opt('states'), target = args[0];
+const statesArg = opt('states'), target = args[0];
 if (args.length > 1) { // several pages, one run
 	const rest = process.argv.slice(2).filter((a, i, all) => !args.includes(a) && a !== '--out' && all[i - 1] !== '--out'); let bad = 0;
 	for (const t of args) bad |= spawnSync(process.execPath, [fileURLToPath(import.meta.url), t, ...rest, '--out', join(out, basename(t.split('?')[0]).replace(/\.html?$/i, ''))], { stdio: 'inherit' }).status ?? 1;
@@ -27,7 +27,7 @@ const nearTokens = (src) => { try { if (/^https?:|^file:/.test(src)) return null
 const vpList = (v) => (Array.isArray(v) ? v : [v]).flatMap((x) => String(x || '').split(',')).map((s) => s.trim()).filter(Boolean);
 const viewports = (vpArg.length ? vpList(vpArg) : vpList(tokens?.viewports ?? (target ? nearTokens(target)?.viewports : null))).map((s) => { const m = /^(\d{3,4})x(\d{3,4})$/.exec(s); if (!m) { console.error(`--viewport takes WIDTHxHEIGHT, for example 390x844 (got "${s}")`); process.exit(2); } return [+m[1], +m[2]]; }).sort((a, b) => a[0] - b[0]);
 if (!viewports.length) viewports.push([390, 844], [1440, 900]);
-const [sw, sh] = viewports[0], [ww] = viewports[viewports.length - 1]; // states, markers and variants at the smallest view; the whole page at the widest
+const [sw, sh] = viewports[0], [ww] = viewports[viewports.length - 1]; // states and markers at the smallest view; the whole page at the widest
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
 const SELF = ['default', 'idle'], ACT = ['hover', 'focus', 'focus-visible', 'active', 'pressed', 'moving', 'dragging'], allStates = [...new Set((statesArg || '').split(',').map(kebab).filter(Boolean))];
 const states = allStates.filter((s) => !SELF.includes(s) && !ACT.includes(s)), itemStates = new Set((Array.isArray(tokens?.mechanic?.itemStates) ? tokens.mechanic.itemStates : []).map(kebab));
@@ -70,7 +70,6 @@ for (const s of states.filter((x) => !markerStates.includes(x))) shots.push({ fi
 for (const s of markerStates) shots.push({ file: `marker-${s}`, lang: first, w: sw, h: sh, params: {}, marker: probe.markers[s] });
 if (!noWorst && !landing) shots.push({ file: 'worst', lang: first, w: sw, h: sh, params: { data: 'worst' }, sheet: true });
 if (states.includes('error')) for (const lang of others) shots.push({ file: `state-error-${lang}`, lang, w: sw, h: sh, params: { state: 'error' }, sheet: true });
-for (let v = 1; v <= variants; v++) for (const lang of order) shots.push({ file: `v${v}-${lang}-${sw}`, lang, w: sw, h: sh, params: { v: String(v) } });
 
 const take = async (s) => {
 	const page = await browser.newPage({ viewport: { width: s.w, height: s.h } });

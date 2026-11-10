@@ -8,7 +8,7 @@ Ask your agent to "go wild" on a page. GoBanana bends the brief into unexpected 
 
 The plugin connects your agent to the GoBanana MCP server and adds 13 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
 
-> Status: v0.9.5, beta. The server runs at `https://gobanana.fun`.
+> Status: v0.9.6, beta. The server runs at `https://gobanana.fun`.
 
 ## Install
 

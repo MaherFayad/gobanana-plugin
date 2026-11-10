@@ -1,4 +1,4 @@
-// gb-tools v12: the fetch tag.
+// gb-tools v13: the fetch tag.
 // gb-measure: a draft's accessibility floor and content honesty at the brief's viewports, FAIL and WARN.
 //   node gb-measure.mjs <file.html|url> [--lint] [--data worst] [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--subject words|none] [--json]
 // Flags and checks: measure-script.
@@ -20,10 +20,10 @@ const allow = [...list(ta.join(',')), ...(Array.isArray(tokens?.tasteAllows) ? t
 flag('work'); flag('phone'); const asJson = flag('json'), lint = flag('lint'), dv = opt('data');
 const landing = flag('landing') || tokens?.landing === true;
 const kebab = (s) => String(s).trim().replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
-const roughDir = opt('rough'), rough = roughDir !== null, vpArg = []; for (let v; (v = opt('viewport')) !== null;) vpArg.push(v);
-const stateIds = rough ? [] : list(opt('states')).map(kebab).filter((s) => !/^(default|idle|hover|focus|focus-visible|active|pressed|moving|dragging)$/.test(s)), target = args[0] && args[0] + (dv ? '?data=' + dv : '');
-const usage = () => { console.error('usage: node gb-measure.mjs <file.html|url> | --rough <out-dir> a.html ...; every flag: the comment at the top of this file'); process.exit(2); };
-if ((rough && (!roughDir || roughDir.startsWith('--') || !args.length)) || (!target && !languages.every((l) => urlFor[l]))) usage();
+const vpArg = []; for (let v; (v = opt('viewport')) !== null;) vpArg.push(v);
+const stateIds = list(opt('states')).map(kebab).filter((s) => !/^(default|idle|hover|focus|focus-visible|active|pressed|moving|dragging)$/.test(s)), target = args[0] && args[0] + (dv ? '?data=' + dv : '');
+const usage = () => { console.error('usage: node gb-measure.mjs <file.html|url>; every flag: the comment at the top of this file'); process.exit(2); };
+if (!target && !languages.every((l) => urlFor[l])) usage();
 const nearTokens = (src) => { try { if (/^https?:/.test(src)) return null; const fp = src.startsWith('file:') ? fileURLToPath(src.split('?')[0]) : resolve(src.split('?')[0]); return JSON.parse(readFileSync(join(dirname(fp), 'tokens.json'), 'utf8')); } catch { return null; } };
 const vpList = (v) => (Array.isArray(v) ? v : [v]).flatMap((x) => String(x || '').split(',')).map((s) => s.trim()).filter(Boolean);
 const vpRaw = vpArg.length ? vpList(vpArg) : vpList(tokens?.viewports ?? (target ? nearTokens(target)?.viewports : null));
@@ -416,16 +416,16 @@ const browser = guard(await pw.chromium.launch().catch(cannot)), runs = [], repo
 try { rmSync(noRender, { force: true }); } catch {}
 const pageUrl = (src) => { const [fp, q] = src.split('?'); return new URL(/^https?:|^file:/.test(src) ? src : pathToFileURL(resolve(fp)).href + (q ? '?' + q : '')); };
 const LAYOUT = ['overflow', 'text-overlap', 'clipped-text', 'text-spill', 'covered-content', 'home-indicator', 'hidden-shown', 'small-text'];
-const ROUGH = ['overflow', 'body-size', 'small-text', 'contrast', 'contrast-ground', 'target-size', 'side-margin', 'text-overlap', 'alt-missing'];
 const settle = async (page, ms) => { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(ms); };
 async function measureRun(r, src) {
 	const page = await browser.newPage({ viewport: { width: r.w, height: r.h }, reducedMotion: r.reduce ? 'reduce' : 'no-preference' });
 	const u = pageUrl(urlFor[r.lang] || src); if (r.lang && !urlFor[r.lang]) u.searchParams.set('lang', r.lang); if (r.state) u.searchParams.set('state', r.state);
-	const wait = r.rough ? 800 : 1500;
+	const wait = 1500;
 	await page.goto(u.href, { waitUntil: 'load' }); await settle(page, wait);
-	const res = await page.evaluate(MEASURE, { want: r.lang, allow, landing, main: r.w === mainW && !r.rough, subject, noSlot });
+	const res = await page.evaluate(MEASURE, { want: r.lang, allow, landing, main: r.w === mainW, subject, noSlot });
 	if (r.state) { res.findings = res.findings.filter((f) => LAYOUT.includes(f.id)); res.ground = []; }
-	const kinds = r.rough ? [] : await page.$$eval('[data-mechanic]', (es) => es.map((e) => [e.dataset.mechanic.trim().toLowerCase()]));
+	const kinds = await page.$$eval('[data-mechanic]', (es) => es.map((e) => [e.dataset.mechanic.trim().toLowerCase()]));
+	const parts = await page.$$eval('[data-part]', (es) => [...new Set(es.map((e) => e.dataset.part.trim().toLowerCase()).filter(Boolean))]);
 	if (!r.reduce && !r.state && !allow.includes('mechanic-still')) for (const [i, [kind]] of kinds.entries()) {
 		const act = { scroll: 'a scroll of one screen', tap: 'a tap on its control', swipe: 'a 200px drag toward the start edge' }[kind], el = page.locator('[data-mechanic]').nth(i); if (!act) continue;
 		const box = () => el.evaluate((e) => { const { x, y, width, height } = e.getBoundingClientRect(), mx = x + width / 2, my = y + height / 2;
@@ -465,7 +465,7 @@ async function measureRun(r, src) {
 		if (low.length) res.findings.push({ level: 'FAIL', id: 'contrast-ground', msg: `${low.length} text block(s) on glass, a gradient or an image fall under AA at the worst point of the ground: ${low.slice(0, 4).join('; ')}; darken or lighten the text, or put it on a more solid panel` });
 	} catch (e) { res.findings.push({ level: 'WARN', id: 'contrast-unmeasured', msg: `${res.ground.length} text block(s) on an image or gradient could not be sampled (${String(e.message || e).split('\n')[0]}): check them by eye` }); }
 	delete res.ground;
-	if (!r.reduce && !r.state && !r.rough && r.w === mainW) try {
+	if (!r.reduce && !r.state && r.w === mainW) try {
 		await page.addStyleTag({ content: '*,*::before,*::after{transition:none!important;animation:none!important}' });
 		await page.evaluate(() => { const sig = (e) => { const s = getComputedStyle(e); return [s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0 ? s.outlineStyle + s.outlineWidth + s.outlineColor : '', s.boxShadow, s.borderColor, s.borderWidth, s.backgroundColor, s.color, s.textDecorationLine, s.transform].join('|'); };
 			const near = (e) => [e, e.parentElement, e.closest('label'), ...[...e.querySelectorAll('*')].slice(0, 40)].filter((n, i, a) => n && n !== document.body && a.indexOf(n) === i); // a ring may be drawn on a part (an SVG tile, the active option)
@@ -479,26 +479,24 @@ async function measureRun(r, src) {
 		if (bare.length) res.findings.push({ level: 'FAIL', id: 'focus-visible', msg: `${bare.length} control(s) show no visible focus when tabbed to: ${bare.slice(0, 3).join(', ')}; give :focus-visible an outline or ring of 3:1 or more` });
 	} catch {}
 	if (r.reduce) res.findings = res.findings.filter((f) => f.id === 'hidden-first-screen').map((f) => ({ ...f, id: 'reduced-motion-hidden', msg: 'with reduced motion: ' + f.msg }));
-	if (r.rough) res.findings = res.findings.filter((f) => ROUGH.includes(f.id));
 	if (r.lang && !r.reduce && !String(res.measured.lang).toLowerCase().startsWith(r.lang)) res.findings.push({ level: 'FAIL', id: 'lang-switch', msg: `asked for ?lang=${r.lang} but html lang is "${res.measured.lang}"; set <html lang> and dir from ?lang= (or pass --${r.lang} <url>)` });
 	await page.close();
 	const vw = viewports.length > 1 || r.w === 390 || r.w === 1440 ? `${r.w}` : `${r.w}x${r.h}`;
-	return { run: `${r.lang || res.measured.lang || 'page'}-${vw}${r.reduce ? '-reduced' : ''}${r.state ? '-state-' + r.state : ''}`, lang: r.lang || String(res.measured.lang || '').toLowerCase().split(/[-_]/)[0], width: r.w, height: r.h, reduced: r.reduce, ...(r.state ? { state: r.state } : {}), ...res };
+	return { run: `${r.lang || res.measured.lang || 'page'}-${vw}${r.reduce ? '-reduced' : ''}${r.state ? '-state-' + r.state : ''}`, lang: r.lang || String(res.measured.lang || '').toLowerCase().split(/[-_]/)[0], width: r.w, height: r.h, reduced: r.reduce, ...(r.state ? { state: r.state } : {}), parts, ...res };
 }
 /** measure.json from one file's runs. Keeps round 1 (and a gb-lint count for the same file) from an earlier run in the same folder. */
-function summarize(report, src, langs, jsonPath, isRough) {
+function summarize(report, src, langs, jsonPath) {
 	const loaded = new Set(report.flatMap((x) => x.measured.loadedFonts.map((f) => f.toLowerCase())));
-	if (!isRough) for (const f of [...new Set(report.flatMap((x) => x.measured.missingFonts || []))].filter((f) => !loaded.has(f.toLowerCase()))) report[0].findings.push({ level: 'FAIL', id: 'font-not-loaded', msg: `${f} is set on the page's text but never loaded (no font link, a wrong name, or a blocked file); screenshots show a fallback: link it, or set a face that loads` });
+	for (const f of [...new Set(report.flatMap((x) => x.measured.missingFonts || []))].filter((f) => !loaded.has(f.toLowerCase()))) report[0].findings.push({ level: 'FAIL', id: 'font-not-loaded', msg: `${f} is set on the page's text but never loaded (no font link, a wrong name, or a blocked file); screenshots show a fallback: link it, or set a face that loads` });
 	const ids = (lvl) => [...new Set(report.flatMap((x) => x.findings.filter((f) => f.level === lvl).map((f) => f.id)))];
 	const failIds = ids('FAIL'), warnIds = ids('WARN'), fails = failIds.length, views = report.filter((x) => !x.reduced && !x.state), wide = views.filter((x) => x.width === mainW);
 	const defaultView = ![src, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u)));
 	const bodies = views.map((x) => x.measured.bodyPx).filter((n) => typeof n === 'number' && n > 0);
 	const languages = langs.length ? langs : [...new Set(views.map((x) => x.lang).filter(Boolean))];
 	const measure = defaultView && wide.length && bodies.length ? { fails, textElements: Math.max(0, ...wide.map((x) => x.measured.textElements)), bodyPx: Math.min(...bodies), languages } : null;
-	if (measure && isRough) { measure.rough = true; if (fails) measure.openFails = failIds; }
 	const by = new Map(); for (const x of report) for (const f of x.findings) { const k = f.level + ' ' + f.id, e = by.get(k) || { level: f.level, id: f.id, msgs: new Map() }; e.msgs.set(f.msg, [...(e.msgs.get(f.msg) || []), x.run]); by.set(k, e); }
 	const findings = [...by.values()].sort((a, b) => (a.level === b.level ? 0 : a.level === 'FAIL' ? -1 : 1)).map((e) => ({ level: e.level, id: e.id, msgs: [...e.msgs].map(([msg, runs]) => ({ msg, runs })) }));
-	const summary = { tool: 'gb-measure', version: 3, ...(isRough ? { rough: true } : {}), target: src || urlFor, at: new Date().toISOString(), viewports: viewports.map(([w, h]) => `${w}x${h}`), languages, fails, warns: warnIds.length, failIds, warnIds, measure,
+	const summary = { tool: 'gb-measure', version: 3, target: src || urlFor, at: new Date().toISOString(), viewports: viewports.map(([w, h]) => `${w}x${h}`), languages, fails, warns: warnIds.length, failIds, warnIds, measure, parts: [...new Set(report.flatMap((x) => x.parts || []))],
 		floor: { bodyPx: { default: 16, ar: 17 }, smallestPx: 14, tapPx: { 390: 44, 1440: 24 }, contrast: { text: 4.5, large: 3 } },
 		states: stateIds, runs: report.map((x) => ({ run: x.run, lang: x.lang, width: x.width, ...(x.reduced || x.state ? { ...(x.reduced ? { reduced: true } : { state: x.state }) } : { textElements: x.measured.textElements, bodyPx: x.measured.bodyPx, smallText: x.measured.smallText, sizes: x.measured.sizes, arabicChars: x.measured.arabicChars, dir: x.measured.dir }), fails: [...new Set(x.findings.filter((f) => f.level === 'FAIL').map((f) => f.id))], warns: [...new Set(x.findings.filter((f) => f.level === 'WARN').map((f) => f.id))] })),
 		findings: findings.map((e) => ({ level: e.level, id: e.id, msg: e.msgs[0].msg, runs: e.msgs.flatMap((m) => m.runs) })) };
@@ -507,34 +505,18 @@ function summarize(report, src, langs, jsonPath, isRough) {
 	const same = prev?.tool === 'gb-measure' && JSON.stringify(prev.target) === JSON.stringify(summary.target);
 	summary.round = same ? (prev.round || 1) + 1 : 1;
 	summary.round1 = same ? prev.round1 || { fails: prev.fails, warns: prev.warns, failIds: prev.failIds, at: prev.at } : { fails, warns: warnIds.length, failIds, at: summary.at };
-	if (prev?.lint && fp && prev.lint.file === fp && prev.lint.mtimeMs === mtimeMs) { summary.lint = prev.lint; summary.lintFails = prev.lint.fails; if (measure) measure.lintFails = prev.lint.fails; if (summary.round === 1) summary.round1.lintFails = prev.lint.fails; if (measure && isRough && prev.lint.rules?.length) measure.openFails = [...new Set([...failIds, ...prev.lint.rules])]; summary.failIds = [...new Set([...failIds, ...(prev.lint.rules || [])])]; }
+	if (prev?.lint && fp && prev.lint.file === fp && prev.lint.mtimeMs === mtimeMs) { summary.lint = prev.lint; summary.lintFails = prev.lint.fails; if (measure) measure.lintFails = prev.lint.fails; if (summary.round === 1) summary.round1.lintFails = prev.lint.fails; summary.failIds = [...new Set([...failIds, ...(prev.lint.rules || [])])]; }
 	summary.checks = { fails: summary.round1.fails, warns: summary.warns };
 	try { mkdirSync(dirname(jsonPath), { recursive: true }); writeFileSync(jsonPath, JSON.stringify(summary, null, 1)); } catch (e) { console.error('could not write ' + jsonPath + ': ' + e.message); }
 	if (fp) try {
 		const dir = join(process.env.TMPDIR || '/tmp', 'gb'), sp = join(dir, 'checked.json'); mkdirSync(dir, { recursive: true }); let st = {}; try { st = JSON.parse(readFileSync(sp, 'utf8')); } catch {}
 		const was = st[fp]; // same mtime: the worse run counts
-		st[fp] = { mtimeMs, fails: was?.mtimeMs === mtimeMs ? Math.max(was.fails, fails) : fails, at: Date.now(), summary: jsonPath, ...(isRough ? { rough: true } : {}) }; writeFileSync(sp, JSON.stringify(st));
+		st[fp] = { mtimeMs, fails: was?.mtimeMs === mtimeMs ? Math.max(was.fails, fails) : fails, at: Date.now(), summary: jsonPath }; writeFileSync(sp, JSON.stringify(st));
 	} catch {}
 	return { summary, findings, measure, fails };
 }
 const fileOf = (src) => { try { return src && !/^https?:/.test(src) ? (src.startsWith('file:') ? fileURLToPath(src.split('?')[0]) : resolve(src.split('?')[0])) : null; } catch { return null; } };
 const firstLang = async (src) => { try { const p = await browser.newPage({ viewport: { width: mainW, height: mainH } }); await p.goto(pageUrl(src).href, { waitUntil: 'load' }); const l = (await p.evaluate(() => document.documentElement.lang || '')).trim().toLowerCase().split(/[-_]/)[0]; await p.close(); return /^[a-z]{2,3}$/.test(l) ? l : null; } catch { return null; } };
-const pool = async (items, k, fn) => { const out = []; let next = 0; await Promise.all(Array.from({ length: k }, async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i]); } })); return out; };
-
-if (rough) {
-	const files = args, t0 = Date.now(), jobs = files.flatMap((f) => viewports.map(([w, h]) => ({ f, w, h })));
-	const done = await pool(jobs, 4, async (j) => { try { return await measureRun({ lang: langArg[0] || '', w: j.w, h: j.h, reduce: false, rough: true }, j.f); } catch (e) { return { error: String(e.message || e).split('\n')[0] }; } });
-	await browser.close(); let bad = 0;
-	for (const f of files) {
-		const reps = done.filter((x, i) => jobs[i].f === f), name = basename(f.split('?')[0]).replace(/\.html?$/i, '').replace(/[^\w.-]+/g, '-') || 'page', jsonPath = join(resolve(roughDir), name, 'measure.json');
-		const err = reps.find((x) => x.error); if (err) { bad++; console.log(`rough ${f}: not measured (${err.error})`); continue; }
-		const { measure: m, fails: n, summary: s } = summarize(reps, f, langArg, jsonPath, true);
-		console.log(`rough ${f}: ${n ? `${n} FAIL (${s.failIds.join(', ')})` : 'PASS'}, body ${m?.bodyPx ?? 'n/a'}px, ${m?.textElements ?? 0} text at ${viewports.map(([w, h]) => `${w}x${h}`).join(' and ')}; ${jsonPath}`);
-	}
-	console.log(`${files.length - bad} rough(s) measured in ${Math.round((Date.now() - t0) / 100) / 10}s, floor checks only. One pass, no fix rounds: place each with the measure object from its measure.json (its open FAILs are already in measure.openFails).`);
-	process.exit(bad ? 1 : 0);
-}
-
 const extra = (() => { try { const q = String(target || '').split('?')[1]; return q ? [...new URLSearchParams(q)].filter(([k]) => !/^(lang|shot)$/.test(k)).map(([k, v]) => `-${k}-${v}`).join('').replace(/[^\w-]/g, '') : ''; } catch { return ''; } })();
 const jsonPath = join(resolve(outDir || join(process.env.TMPDIR || '/tmp', 'gb', 'shots')), `measure${extra}.json`);
 if (lint && !extra && fileOf(target)) spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'gb-lint.mjs'), fileOf(target), ...(tp ? ['--tokens', tp] : []), '--fix', '--measure-dir', dirname(jsonPath)], { stdio: [0, 2, 2] });
@@ -544,13 +526,14 @@ runs.push({ lang: languages[0], w: mainW, h: mainH, reduce: true });
 for (const state of stateIds) for (const [w, h] of viewports) runs.push({ lang: languages[0], w, h, reduce: false, state });
 for (const r of runs) report.push(await measureRun(r, target));
 await browser.close();
-const { findings, measure, fails } = summarize(report, target, languages, jsonPath, false);
+const { findings, measure, fails } = summarize(report, target, languages, jsonPath);
 if (asJson) console.log(JSON.stringify(report, null, 1));
 else {
 	for (const x of report) { if (x.reduced || x.state) continue; const m = x.measured; console.log(`${x.run}: body ${m.bodyPx ?? 'n/a'}px, under 14px ${m.smallText}, text ${m.textElements}, sizes [${m.sizes}], largest ${m.largest}px, faces [${m.families}]`); }
 	for (const e of findings) console.log(`${e.level} ${e.id}: ${e.msgs.map(({ msg, runs: at }) => `${msg}  [${at.join(', ')}]`).join('; also ')}`);
 }
 const at = `${mainW}`;
+{ const ps = [...new Set(report.flatMap((x) => x.parts || []))]; console.log(ps.length ? `Parts (data-part): ${ps.join(', ')}` : 'Parts (data-part): none; name each component, data-part="button|card|tabs|field|nav"'); }
 if (measure) console.log(`${fails} failing check(s), body ${measure.bodyPx}px, ${measure.textElements} text elements read at ${at}. Summary: ${jsonPath}`);
 else console.log(`${fails} failing check(s). No measure for add_to_canvas: ${![target, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u))) ? `no ${at} run found body text` : 'this run was a ?state or ?data view'}; measure the rendered default view (no ?state or ?data) for it. Summary: ${jsonPath}`);
 console.log(fails ? 'Open FAILs go in measure.openFails; nothing here blocks placing.' : 'Numbers are evidence for the craft check; they never replace looking side by side.');

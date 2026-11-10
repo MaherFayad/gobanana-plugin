@@ -1,4 +1,4 @@
-// gb-tools v12: the fetch tag.
+// gb-tools v13: the fetch tag.
 // node gb-probe.mjs <url|file.html> <outdir>: each keyboard stop at 390 (ring, label, covered) and page.under44 (tap targets)
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { join, resolve } from 'node:path'; import { pathToFileURL } from 'node:url';

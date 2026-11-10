@@ -1,4 +1,4 @@
-// gb-tools v12: the fetch tag.
+// gb-tools v13: the fetch tag.
 // gb-lint: motion, phone and 14px floor checks. node gb-lint.mjs <file.html> [--fix] [--measure-dir <dir>]
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs"; import { join, resolve } from "node:path";
 const argv = process.argv.slice(2), ti = argv.indexOf("--tokens"), mi = argv.indexOf("--measure-dir"), file = argv.find((a, i) => !a.startsWith("--") && (ti < 0 || i !== ti + 1) && (mi < 0 || i !== mi + 1));
@@ -77,7 +77,7 @@ if (mi >= 0) {
 	m.lint = { file: resolve(file), mtimeMs: statSync(file).mtimeMs, fails: lintFails, rules, at: new Date().toISOString() };
 	m.lintFails = lintFails; if (m.measure) m.measure.lintFails = lintFails;
 	m.failIds = [...new Set([...(m.failIds || []).filter((id) => !id.startsWith("lint-")), ...rules])];
-	if (m.measure?.rough) { const open = [...new Set([...(m.failIds || []), ...rules])]; if (open.length) m.measure.openFails = open; else delete m.measure.openFails; } if (m.round1 && m.round === 1 && m.round1.lintFails === undefined) m.round1.lintFails = lintFails;
+	if (m.round1 && m.round === 1 && m.round1.lintFails === undefined) m.round1.lintFails = lintFails;
 	try { mkdirSync(resolve(argv[mi + 1]), { recursive: true }); writeFileSync(p, JSON.stringify(m, null, 1)); console.log(`${lintFails} lint FAIL(s) written to ${p}`); } catch (e) { console.error(`could not write ${p}: ${e.message}`); }
 }
 process.exit(lintFails ? 1 : 0);
