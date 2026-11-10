@@ -5,7 +5,7 @@ description: Build and arrange a GoBanana moodboard from references in the canva
 
 # GoBanana moodboard
 
-Plugin 0.9.6. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.9.6, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
+Plugin 0.9.7. Use GoBanana tools under any prefix; with none, ask the user to connect the GoBanana connector at claude.ai or run `/mcp`. Call ping once; if its minPlugin is above 0.9.7, tell the user in one line to update (claude.ai: re-sync the org plugin; Claude Code: `/plugin update gobanana`).
 
 These hold even if get_playbook fails:
 
@@ -16,4 +16,4 @@ These hold even if get_playbook fails:
 5. Run the intake stop (read `design/gobanana/CONTEXT.md`, ask only what is missing) before `bend_brief`.
 6. Give the canvas web link; the ask goes last.
 
-Call get_playbook with name `gobanana-moodboard` and plugin `0.9.6`, and follow it exactly; batch the playbooks it names in `more`.
+Call get_playbook with name `gobanana-moodboard` and plugin `0.9.7`, and follow it exactly; batch the playbooks it names in `more`.

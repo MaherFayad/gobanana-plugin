@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "gobanana": {
+      "source": {
+        "source": "github",
+        "repo": "MaherFayad/gobanana-plugin"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "gobanana@gobanana": true
+  }
+}
