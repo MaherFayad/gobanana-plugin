@@ -1,17 +1,23 @@
 # GoBanana plugin
 
-The GoBanana plugin for Claude Code and claude.ai (version 0.9.7), and a starter project to build a page in. This repo is written by a release script; changes made here are replaced on the next release.
+The GoBanana plugin for Claude Code and claude.ai (version 0.9.8), and a starter project to build a page in. This repo is written by a release script; changes made here are replaced on the next release.
 
 ## Install the plugin
 
-In Claude Code:
+In Claude Code, from your shell (version 2.1.292 or later):
+
+```bash
+claude plugin install gobanana --marketplace MaherFayad/gobanana-plugin
+```
+
+On any version, inside Claude Code:
 
 ```bash
 /plugin marketplace add MaherFayad/gobanana-plugin
 /plugin install gobanana@gobanana
 ```
 
-On claude.ai, add `MaherFayad/gobanana-plugin` as a marketplace under Customize, Plugins.
+On claude.ai (Pro, Max, Team or Enterprise): Customize, Plugins, Add, Add marketplace, paste `MaherFayad/gobanana-plugin`, then Add on GoBanana and Connect in its Connectors tab.
 
 ## Start a project
 

@@ -8,24 +8,31 @@ Ask your agent to "go wild" on a page. GoBanana bends the brief into unexpected 
 
 The plugin connects your agent to the GoBanana MCP server and adds 13 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
 
-> Status: v0.9.7, beta. The server runs at `https://gobanana.fun`.
+> Status: v0.9.8, beta. The server runs at `https://gobanana.fun`.
 
 ## Install
 
 ### Claude Code
 
-Add the GoBanana marketplace, then install the plugin:
+One command in your shell (Claude Code 2.1.292 or later):
 
-```text
-/plugin marketplace add MaherFayad/gobanana-plugin
-/plugin install gobanana@gobanana
+```bash
+claude plugin install gobanana --marketplace MaherFayad/gobanana-plugin
 ```
+
+Inside a session (2.1.275 or later): `/plugin install gobanana --marketplace MaherFayad/gobanana-plugin`. On any version: `/plugin marketplace add MaherFayad/gobanana-plugin`, then `/plugin install gobanana@gobanana`.
 
 Then run `/mcp`, pick `plugin:gobanana:gobanana`, and log in. GoBanana uses OAuth, so there is no API key to paste. The skills need the GoBanana tools: without them they only know the safety rules.
 
-### claude.ai and Cowork
+### claude.ai, Claude Desktop and Cowork
 
-Add the plugin from your organization's plugin settings or from Anthropic's directory once it is listed, and connect the GoBanana connector (claude.ai settings, Connectors) and log in.
+Plugins need a paid plan (Pro, Max, Team or Enterprise).
+
+1. Open Customize, Plugins (`https://claude.ai/customize/plugins`).
+2. Choose Add, then Add marketplace, paste `MaherFayad/gobanana-plugin`, then Add on GoBanana.
+3. Open GoBanana's Connectors tab, choose Connect and log in.
+
+No GitHub access: download `https://gobanana.fun/downloads/gobanana-plugin.zip`, then choose Add, Upload plugin. On the Free plan, add the connector instead: Customize, Connectors, Add custom connector, `https://gobanana.fun/api/mcp`. Team and Enterprise Owners can install it for everyone: Organization settings, Plugins & skills, Marketplaces, Add plugins, Sync from GitHub, then Default access, Installed by default. All paths: https://gobanana.fun/docs/setup/claude-apps/
 
 ### Connector or plugin server
 
