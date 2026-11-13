@@ -8,7 +8,7 @@ Ask your agent to "go wild" on a page. GoBanana bends the brief into unexpected 
 
 The plugin connects your agent to the GoBanana MCP server and adds 13 skills and 5 subagents. Each one is a short stub: it holds the safety rules and calls the GoBanana `get_playbook` tool, and the server sends the full playbook (which tools to call, in which order, and how to present the results) when it is needed. Playbook updates reach you without reinstalling the plugin.
 
-> Status: v0.9.8, beta. The server runs at `https://gobanana.fun`.
+> Status: v0.9.9, beta. The server runs at `https://gobanana.fun`.
 
 ## Install
 
@@ -33,6 +33,16 @@ Plugins need a paid plan (Pro, Max, Team or Enterprise).
 3. Open GoBanana's Connectors tab, choose Connect and log in.
 
 No GitHub access: download `https://gobanana.fun/downloads/gobanana-plugin.zip`, then choose Add, Upload plugin. On the Free plan, add the connector instead: Customize, Connectors, Add custom connector, `https://gobanana.fun/api/mcp`. Team and Enterprise Owners can install it for everyone: Organization settings, Plugins & skills, Marketplaces, Add plugins, Sync from GitHub, then Default access, Installed by default. All paths: https://gobanana.fun/docs/setup/claude-apps/
+
+### Cursor, Codex, VS Code, Windsurf and other coding agents
+
+Add the server in your agent first (each one has a setup page: https://gobanana.fun/docs/setup/overview/), then add the skills with the [skills CLI](https://github.com/vercel-labs/skills), from your project (Node.js 22.20 or later):
+
+```bash
+npx skills add MaherFayad/gobanana-plugin
+```
+
+It reads the marketplace in MaherFayad/gobanana-plugin and copies the 13 skills into your agent's skills folder. It does not add the subagents, the hooks or the connector, and Finished mode needs Claude Code. Update them with `npx skills update`.
 
 ### Connector or plugin server
 

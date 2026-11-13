@@ -1,4 +1,4 @@
-// gb-tools v13: the fetch tag.
+// gb-tools v14: the fetch tag.
 // gb-inventory: the colours, sizes, spacings and radii a live page uses, near duplicates, and a tidy set. No AI.
 //   node gb-inventory.mjs <url|file.html> [more] [--viewport 390x844] [--out dir] [--json]
 //   Writes <out>/inventory.json and inventory.md. Exit 0 done, 1 a page failed, 2 usage, 3 cannot render.

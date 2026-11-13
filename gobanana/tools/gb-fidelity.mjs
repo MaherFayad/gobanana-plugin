@@ -1,4 +1,4 @@
-// gb-tools v13: the fetch tag.
+// gb-tools v14: the fetch tag.
 // gb-fidelity: a draft against its hero, pixels and the DOM only, no AI; the hero and refs are read in memory
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -344,6 +344,27 @@ export function copiedArt(arts, sources) {
 	return hits;
 }
 export const imageryFar = (d, h) => Math.max(d, h) >= 0.12 && Math.min(d, h) < Math.max(d, h) * FAR.imagery;
+// --color: mean HSV saturation and brightness per cell of a 4x4 grid; the draft is letterboxed into the hero's frame, never stretched
+export const COLOR = { grid: 4, close: 0.05 };
+export function hsvCells(img, frame = [img.w, img.h], g = COLOR.grid) {
+	const [FW, FH] = frame, k = Math.min(FW / img.w, FH / img.h), ox = (FW - img.w * k) / 2, oy = (FH - img.h * k) / 2, st = Math.max(1, Math.floor(Math.sqrt(img.w * img.h / 1e6)));
+	const s = new Float64Array(g * g), v = new Float64Array(g * g), n = new Float64Array(g * g);
+	for (let y = 0; y < img.h; y += st) { const r = Math.min(g - 1, Math.floor((oy + (y + 0.5) * k) * g / FH)); for (let x = 0; x < img.w; x += st) {
+		const i = (y * img.w + x) * 4, mx = Math.max(img.d[i], img.d[i + 1], img.d[i + 2]), mn = Math.min(img.d[i], img.d[i + 1], img.d[i + 2]), c = r * g + Math.min(g - 1, Math.floor((ox + (x + 0.5) * k) * g / FW));
+		s[c] += mx ? (mx - mn) / mx : 0; v[c] += mx / 255; n[c]++;
+	} }
+	return [...n].map((q, c) => (q ? { s: s[c] / q, v: v[c] / q } : null));
+}
+export const colorVerdict = (sat) => (sat < -COLOR.close ? 'greyer than the hero' : sat > COLOR.close ? 'louder than the hero' : 'colour close');
+export function colorDelta(hero, draft, g = COLOR.grid) {
+	const a = hsvCells(hero, [hero.w, hero.h], g), b = hsvCells(draft, [hero.w, hero.h], g), r3 = (x) => Math.round(x * 1000) / 1000 || 0, ix = a.map((_, c) => c).filter((c) => a[c] && b[c]);
+	const axis = (q) => { const d = ix.map((c) => [c, b[c][q] - a[c][q]]), w = d.reduce((m, x) => (Math.abs(x[1]) > Math.abs(m[1]) ? x : m), [ix[0] ?? 0, 0]); return { mean: r3(d.reduce((t, x) => t + x[1], 0) / (d.length || 1)), worst: r3(w[1]), worstCell: `r${Math.floor(w[0] / g) + 1}c${(w[0] % g) + 1}` }; };
+	const saturation = axis('s'); return { grid: `${g}x${g}`, cells: ix.length, saturation, brightness: axis('v'), verdict: colorVerdict(saturation.mean) };
+}
+export function colorLines(cd) {
+	const f = (x) => (x < 0 ? '-' : '+') + Math.abs(x).toFixed(3), l = (n) => `  ${n}: mean delta ${f(cd[n].mean)}, worst cell ${cd[n].worstCell} ${f(cd[n].worst)}`;
+	return [`Colour, measured on a ${cd.grid} grid (draft minus hero; the draft letterboxed into the hero's shape, never stretched):`, l('saturation'), l('brightness'), `Colour verdict (measured): ${cd.verdict}`];
+}
 const ratioFar = (v, lim) => v != null && (v > lim || v < 1 / lim);
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 export function compare(d, h, { draftType = null, heroType = null, pixel = null } = {}) {
@@ -509,12 +530,13 @@ const sizeOf = (s) => { const m = /^(\d{3,4})x(\d{3,4})$/.exec(String(s).trim())
 
 async function main() {
 	const args = process.argv.slice(2), opt = (n) => { const i = args.indexOf('--' + n); return i < 0 ? null : args.splice(i, 2)[1]; }, flag = (n) => { const i = args.indexOf('--' + n); return i < 0 ? false : (args.splice(i, 1), true); };
-	const heroArg = opt('hero'), heroTypeArg = opt('hero-type'), refsArg = opt('refs'), vpArg = opt('viewport'), tp = opt('tokens'), heroCropArg = opt('hero-crop'), draftImage = opt('draft-image'), asJson = flag('json'), diff = flag('diff'), noTrim = flag('no-trim');
+	const heroArg = opt('hero'), heroTypeArg = opt('hero-type'), refsArg = opt('refs'), vpArg = opt('viewport'), tp = opt('tokens'), heroCropArg = opt('hero-crop'), draftImage = opt('draft-image'), asJson = flag('json'), diff = flag('diff'), color = flag('color'), noTrim = flag('no-trim');
 	const part = opt('part'), refArg = opt('ref'), refCropArg = opt('ref-crop'), rsArg = opt('ref-size'), selArg = opt('sel'), hero = part ? refArg : heroArg, cropArg = part ? refCropArg : heroCropArg ?? refCropArg;
 	const slug = (v) => String(v).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'part', cf = part || !heroCropArg && refCropArg ? '--ref-crop' : '--hero-crop';
 	const out = join(resolve(opt('out') || join(process.env.TMPDIR || '/tmp', 'gb', 'fidelity')), part ? `part-${slug(part)}` : ''), target = args[0];
-	const usage = (why) => { if (why) console.error(why); console.error('usage: node gb-fidelity.mjs <draft.html|url> --hero <image> [--diff] [--refs "part=url,part=sel:<css>|url"] [--tokens t.json] [--hero-type 56/16] [--hero-crop|--ref-crop x,y,w,h|none [--ref-size WxH]]\n   or: node gb-fidelity.mjs <draft.html|url> --diff --part <name> --ref <image> [--ref-crop x,y,w,h] --sel "<css>"\n   or: --draft-image <png> in place of the page; all take [--viewport 390x844] [--no-trim] [--out dir] [--json]'); process.exit(2); };
+	const usage = (why) => { if (why) console.error(why); console.error('usage: node gb-fidelity.mjs <draft.html|url> --hero <image> [--diff] [--refs "part=url,part=sel:<css>|url"] [--tokens t.json] [--hero-type 56/16] [--hero-crop|--ref-crop x,y,w,h|none [--ref-size WxH]]\n   or: node gb-fidelity.mjs <draft.html|url> --diff --part <name> --ref <image> [--ref-crop x,y,w,h] --sel "<css>"\n   or: --draft-image <png> in place of the page; all take [--viewport 390x844] [--no-trim] [--out dir] [--json]; the hero check and --diff take [--color]'); process.exit(2); };
 	if (!hero || (!target && !draftImage) || [heroArg, heroTypeArg, refsArg, vpArg, tp, heroCropArg, draftImage, part, refArg, refCropArg, rsArg, selArg].some((v) => v === undefined || /^--/.test(v ?? ''))) usage();
+	if (part != null && color) usage('--color compares the whole first screen with the hero; leave out --part');
 	if (part != null && (!diff || !refArg || !selArg || !target || draftImage)) usage('--part needs --diff, --ref <image>, --sel "<css>" and the draft page');
 	for (const [n, v] of [['viewport', vpArg], ['ref-size', rsArg]]) if (v && !sizeOf(v)) usage(`--${n} takes WIDTHxHEIGHT, for example 390x844 (got "${v}")`);
 	const tokens = tp ? JSON.parse(readFileSync(tp, 'utf8')) : (() => { try { return target && !/^https?:/.test(target) ? JSON.parse(readFileSync(join(dirname(target.startsWith('file:') ? fileURLToPath(target.split('?')[0]) : resolve(target.split('?')[0])), 'tokens.json'), 'utf8')) : null; } catch { return null; } })();
@@ -578,8 +600,9 @@ async function main() {
 		const rows = worst.map((r) => ({ label: `${r.name}: ${r.match}% pixels, structure ${r.structure ?? '-'}   ${part ? 'ref' : 'hero'} | draft`, a: crop(hImg, r.x, r.y, r.w, r.h), b: crop(dImg, r.x, r.y, r.w, r.h) })).map((r) => ({ ...r, a: { w: r.a.w, h: r.a.h, b64: b64(r.a) }, b: { w: r.b.w, h: r.b.h, b64: b64(r.b) } }));
 		if (rows.length) writeFileSync(rfile, Buffer.from(await blank.evaluate(REGIONSHEET, { rows }), 'base64'));
 		await browser.close();
+		const cd = color ? colorDelta(hImg, dImg) : null;
 		const now = { pixel, structure: meanStructure(regions), structureMin: minStructure(regions), done: done.startsWith(P + 'Done'), shot }, runs = (prev?.runs || 0) + 1;
-		const rec = { v: 1, tool: 'gb-fidelity', mode: part ? 'part' : 'diff', ...(part ? { part, sel: selArg, ref: hero, box, noRefBand: Math.round(band / f) } : { hero }), ...now, run: runs, size: [W, H], viewport: `${vw}x${vh}`, dpr, heroScale: hs, cssPerHeroPx, tolerance: DIFF_TOL, weights: DIFF, pixelMatch: match, regions, notScored: skipped.map((r) => ({ name: r.name, kind: r.skip })), limits: { ...DONE, maxNotScored: MAX_SKIP }, trimmed: trim, cursors, warns: warns.map((w) => w.split(':')[0].slice(5)), crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([q, v]) => [q, Math.round(v)])) : null, ms: Date.now() - t0 };
+		const rec = { v: 1, tool: 'gb-fidelity', mode: part ? 'part' : 'diff', ...(part ? { part, sel: selArg, ref: hero, box, noRefBand: Math.round(band / f) } : { hero }), ...now, run: runs, size: [W, H], viewport: `${vw}x${vh}`, dpr, heroScale: hs, cssPerHeroPx, tolerance: DIFF_TOL, weights: DIFF, pixelMatch: match, regions, notScored: skipped.map((r) => ({ name: r.name, kind: r.skip })), limits: { ...DONE, maxNotScored: MAX_SKIP }, trimmed: trim, cursors, warns: warns.map((w) => w.split(':')[0].slice(5)), crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([q, v]) => [q, Math.round(v)])) : null, ...(cd ? { colorDelta: cd } : {}), ms: Date.now() - t0 };
 		const best = part && prev && (prev.done !== now.done ? prev.done : prev.structure > now.structure) ? prev : rec;
 		writeFileSync(jf, JSON.stringify({ ...best, runs, last: { run: runs, ...now } }, null, 1));
 		console.log(trimLine);
@@ -589,6 +612,7 @@ async function main() {
 		console.log('Regions, pixel match % / structure % (edges where the hero has them; - when flat in both):');
 		for (let r = 0; r < 3; r++) console.log('  ' + regions.slice(r * 3, r * 3 + 3).map((x) => (x.skip ? `${x.name} ${x.skip}, not scored` : `${x.name} ${x.match}% / ${x.structure ?? '-'}`).padEnd(25)).join(' ').trimEnd());
 		console.log(`The draft's ${part ? `${selArg} box (${box.w}x${box.h} CSS px)` : 'first screen'} at ${at} against the ${part ? `ref for ${part}` : 'hero'} (${cropWhy}); a pixel matches when every channel is within ${DIFF_TOL} (${DIFF.dark} on dark), edge pixels count ${DIFF.edge}x. Look at ${file}${rows.length ? ` and ${rfile} (the ${rows.length} worst regions)` : ''}, local only: never upload them.`);
+		if (cd) for (const l of colorLines(cd)) console.log(l);
 		for (const w of warns) console.log(w);
 		console.log(done);
 		if (!part && !now.done && !done.includes('Not scorable')) console.log(runs >= 2 ? `Run ${runs}: stop the copy here and go to step 2 (at most 2 step 1 runs); name what is short in the reply.` : 'Run 1 of 2: fix the worst regions first (regions.jpg), then run once more.');
@@ -632,19 +656,20 @@ async function main() {
 	const fails = far.length >= 2 ? [`FAIL hero-far: ${far.length} of 5 axes far from the hero (${far.join(', ')}); copy the hero's structure again (grid, type sizes, pictures, density)`] : [];
 	const copied = copiedArt(arts, [{ ref: 'hero', img: heroFull, c: heroFull.w / vp[0], nat: heroNat }, ...pairs.filter((x) => x.img).map((x) => ({ ref: x.part, img: x.img, c: x.img.w / vp[0], nat: x.nat }))]);
 	for (const c of copied) fails.push(`FAIL copied-art: ${c.sel} matches ${c.ref === 'hero' ? 'the hero' : `the ref "${c.ref}"`} at ${c.at[0]},${c.at[1]}; draw or pick the product's own`);
-	const lines = axisLines(scores, far, raw, detail);
+	const lines = axisLines(scores, far, raw, detail), cd = color ? colorDelta(heroImg, draftImg) : null;
 	const H0 = Math.min(900, vp[1]), sheetRows = [{ a: { src: draftSrc, crop: draftImage ? { x: 0, y: 0, w: draftImg.w, h: draftImg.h } : null }, b: { src: heroSrc, crop: heroCrop && { x: heroCrop.x * heroNat, y: heroCrop.y * heroNat, w: heroCrop.w * heroNat, h: heroCrop.h * heroNat } }, h: H0, labelA: `draft ${vp[0]}x${vp[1]}, first screen`, labelB: 'hero' }];
 	for (const p of pairs.filter((x) => x.refSrc)) sheetRows.push({ a: { src: p.draftSrc }, b: { src: p.refSrc, crop: p.refCrop }, h: 520, labelA: `draft: ${p.part}`, labelB: `ref: ${p.part}${p.scores ? `  layout ${p.scores.layout}, palette ${p.scores.palette}` : ''}`, missing: p.error });
 	mkdirSync(out, { recursive: true });
 	const shot = join(out, 'fidelity.jpg'); writeFileSync(shot, Buffer.from(await blank.evaluate(SHEET, { rows: sheetRows, foot: [...lines, ...fails] }), 'base64'));
 	await browser.close();
-	const summary = { v: 1, tool: 'gb-fidelity', hero, viewport: `${vp[0]}x${vp[1]}`, scores, far, fails: [...new Set(fails.map((f) => f.split(':')[0].slice(5)))], limits: FAR, raw, detail, refs: pairs.map(({ draftSrc, refSrc, img, nat, ...p }) => p), copiedArt: copied.map(({ sel, ref, at }) => ({ sel, ref, at })), cursors, ms: Date.now() - t0 };
+	const summary = { v: 1, tool: 'gb-fidelity', hero, viewport: `${vp[0]}x${vp[1]}`, scores, far, fails: [...new Set(fails.map((f) => f.split(':')[0].slice(5)))], limits: FAR, raw, detail, refs: pairs.map(({ draftSrc, refSrc, img, nat, ...p }) => p), copiedArt: copied.map(({ sel, ref, at }) => ({ sel, ref, at })), cursors, ...(cd ? { colorDelta: cd } : {}), ms: Date.now() - t0 };
 	writeFileSync(join(out, 'fidelity.json'), JSON.stringify(summary, null, 1));
 	if (asJson) console.log(JSON.stringify(summary, null, 1));
 	else {
 		console.log(trimLine);
 		console.log(`Draft first screen at ${vp[0]}x${vp[1]} against the hero (${cropWhy}):`);
 		for (const l of lines) console.log(l);
+		if (cd) for (const l of colorLines(cd)) console.log(l);
 		for (const p of pairs) console.log(p.error ? `pair ${p.part}: ${p.error}` : `pair ${p.part}: layout ${p.scores.layout}, palette ${p.scores.palette}, imagery ${p.scores.imagery} (${p.found})`);
 		for (const f of fails) console.log(f);
 		console.log(`Look at ${shot} (local only, never upload it). Pass ${join(out, 'fidelity.json')} as fidelity.`);

@@ -1,4 +1,4 @@
-// gb-tools v13: the fetch tag.
+// gb-tools v14: the fetch tag.
 // gb-measure: a draft's accessibility floor and content honesty at the brief's viewports, FAIL and WARN.
 //   node gb-measure.mjs <file.html|url> [--lint] [--data worst] [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--subject words|none] [--json]
 // Flags and checks: measure-script.
