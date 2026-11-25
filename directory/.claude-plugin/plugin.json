@@ -1,0 +1,24 @@
+{
+  "name": "gobanana",
+  "displayName": "GoBanana",
+  "version": "0.9.9",
+  "description": "One wild idea for a page or two, not your whole product: landing pages, app screens, dashboards, canvas tools, checkout and onboarding. Bend a page into directions that differ in structure, each with a full visual spec, pull art direction and platform-correct UI references into a moodboard canvas, Frankenstein new pages from the best parts, and hand the direction to Claude Code, Cursor, Copilot, v0 or Lovable as scoped files. Mobbin shows what works. GoBanana shows what's next.",
+  "author": {
+    "name": "Maher Fayad",
+    "url": "https://gobanana.fun"
+  },
+  "homepage": "https://gobanana.fun",
+  "license": "MIT",
+  "keywords": [
+    "design",
+    "moodboard",
+    "inspiration",
+    "art-direction",
+    "design-md",
+    "agents-md",
+    "cursor-rules",
+    "palette",
+    "figma",
+    "mcp"
+  ]
+}

@@ -43,6 +43,7 @@ A Next.js app with Tailwind CSS v4 and shadcn/ui, with the GoBanana plugin turne
 
 - `.claude-plugin/marketplace.json`: the marketplace, with one plugin.
 - `gobanana/`: the plugin.
+- `directory/`: the same plugin without hooks or scripts, as Anthropic's plugin directory takes it.
 - `starter/`: the starter project.
 
 Docs: https://gobanana.fun/docs
