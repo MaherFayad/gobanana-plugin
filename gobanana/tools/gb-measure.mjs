@@ -1,4 +1,4 @@
-// gb-tools v14: the fetch tag.
+// gb-tools v15: the fetch tag.
 // gb-measure: a draft's accessibility floor and content honesty at the brief's viewports, FAIL and WARN.
 //   node gb-measure.mjs <file.html|url> [--lint] [--data worst] [--tokens t.json] [--languages en] [--out dir] [--viewport 390x844] [--states a,b] [--taste-allows id] [--landing] [--subject words|none] [--json]
 // Flags and checks: measure-script.
@@ -106,11 +106,13 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	const rpx = (e) => Math.round(e.px), sizes = [...new Set(shown.filter((e) => e.text.length >= 2).map(rpx))].sort((a, b) => a - b);
 	const fams = tally((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim()).filter(([, n]) => n / total >= 0.02);
 	const vizLab = (e) => { const v = e.el.closest('[data-viz]'); return v && e.text.replace(/\d[\d.,:%/]*\s*(?:[A-Za-z]{1,3}(?![A-Za-z])|دقيقة|دقائق|ساعة|ساعات)?/g, ' ').split(/[\s,;:·()+\-\u2212]+/).filter(Boolean).length <= 3 ? v : null; };
-	const bsz = (e) => Math.round(e.el instanceof SVGElement ? e.px : e.size), share = (min) => { const m = new Map(); for (const e of shown) if (!vizLab(e) && e.text.trim().split(/\s+/).length >= min) m.set(bsz(e), (m.get(bsz(e)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null; };
-	const running = share(6), body = running ?? share(1), big = Math.max(...shown.map((e) => e.size), 0);
+	// Running text (v15): a block of 6 words or more that reads as a sentence; caps, letter-spaced labels, headings, labels and buttons never are.
+	const words = (e) => e.text.split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length, isLabel = (e) => e.cs.textTransform === 'uppercase' || (/\p{Lu}/u.test(e.text) && !/\p{Ll}/u.test(e.text)) || (parseFloat(e.cs.letterSpacing) || 0) >= e.size * 0.05 || !!e.el.closest('h1,h2,h3,h4,h5,h6,[role=heading],th,caption,legend,label,button,[role=button]');
+	const prosey = (e) => words(e) >= 6 && !isLabel(e), bsz = (e) => Math.round(e.el instanceof SVGElement ? e.px : e.size), share = (ok) => { const m = new Map(); for (const e of shown) if (!vizLab(e) && ok(e)) m.set(bsz(e), (m.get(bsz(e)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null; };
+	const body = share(prosey), labelPx = share((e) => words(e) >= 1), big = Math.max(...shown.map((e) => e.size), 0);
 	const bodyFloor = ar || want === 'ar' ? 17 : 16;
-	const setBy = () => { const m = new Map(); for (const e of shown) if (!vizLab(e) && bsz(e) === body && (!running || e.text.trim().split(/\s+/).length >= 6)) m.set(sel(e.el), (m.get(sel(e.el)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(', '); };
-	if (body && body < bodyFloor) add('FAIL', 'body-size', `${running ? 'running text (blocks of 6 words or more) is' : 'most text is'} set at ${body}px, by ${setBy()}; body is ${bodyFloor}px or more (${bodyFloor === 17 ? 'Arabic' : 'English'}), labels and data may stay at 14px when the running text is body size`);
+	const setBy = () => { const m = new Map(); for (const e of shown) if (!vizLab(e) && bsz(e) === body && prosey(e)) m.set(sel(e.el), (m.get(sel(e.el)) || 0) + e.text.length); return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(', '); };
+	if (body && body < bodyFloor) add('FAIL', 'body-size', `running text (blocks of 6 words or more) is set at ${body}px, by ${setBy()}; body is ${bodyFloor}px or more (${bodyFloor === 17 ? 'Arabic' : 'English'}), labels and data may stay at 14px when the running text is body size`);
 	const pxs = (e) => `${Math.round(e.px * 10) / 10}px${e.px !== e.size ? ` (${e.size}px scaled)` : ''}`;
 	const tiny = shown.filter((e) => e.px < 13.9 && e.text.trim().length >= 2 && !e.el.closest('sup, sub'));
 	if (tiny.length) add('FAIL', 'small-text', `${tiny.length} text block(s) read under 14px as rendered: ${tiny.slice(0, 3).map((e) => '"' + clip(e.text) + '" ' + pxs(e)).join(', ')}; nothing read goes under 14px (a transform or an SVG viewBox shrinks text too)`);
@@ -389,7 +391,7 @@ function MEASURE({ want = '', allow = [], landing = false, main = innerWidth >= 
 	const unloaded = (f, t) => { const k = famKey(f), own = faces.filter((x) => famKey(x.family) === k); if (own.length || linked.has(k)) return !own.some((x) => x.status === 'loaded') && (!own.length || own.some((x) => covers(x, t))); return !SYSTEM.test(k); };
 	const declared = [...new Set(shown.filter((e) => e.text.length >= 2).map((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim()).filter((f) => f && !GENERIC.test(f)))];
 	const missingFonts = declared.filter((f) => unloaded(f, shown.filter((e) => e.cs.fontFamily.split(',')[0].replace(/["']/g, '').trim() === f).map((e) => e.text).join(' ')));
-	const measured = { lang: html.lang, dir: rtl ? 'rtl' : 'ltr', textElements: textUnits, controls: ctlUnits, bodyPx: body, smallText: tiny.length, arabicChars: arChars, largest: Math.round(big), sizes, families: fams.map(([f]) => f), scripts, loadedFonts, declaredFonts: declared, missingFonts };
+	const measured = { lang: html.lang, dir: rtl ? 'rtl' : 'ltr', textElements: textUnits, controls: ctlUnits, bodyPx: body ?? (labelPx >= bodyFloor ? labelPx : null), runningText: !!body, labelPx, smallText: tiny.length, arabicChars: arChars, largest: Math.round(big), sizes, families: fams.map(([f]) => f), scripts, loadedFonts, declaredFonts: declared, missingFonts };
 	if (main && !allow.includes('static') && !ctl.some((e) => { const cs = gcs(e); return cs.animationName !== 'none' || (cs.transitionProperty !== 'none' && cs.transitionDuration.split(',').some((d) => parseFloat(d) > 0)); })) {
 		const PS = /:(hover|active)\b/, hit = (rules) => [...rules].some((r) => (r.selectorText && PS.test(r.selectorText) && !/gb-switch/.test(r.selectorText) && r.style?.length && r.selectorText.split(',').some((q) => { try { return PS.test(q) && !!document.querySelector(q.replace(/:(hover|active|focus-visible|focus-within|focus)\b/g, '').replace(/[\s>+~]+$/, '') || '*'); } catch { return false; } })) || (r.cssRules && hit(r.cssRules)));
 		if (![...document.styleSheets].some((sh) => { try { return hit(sh.cssRules); } catch { return false; } })) add('WARN', 'static', 'no interaction states: no control has a transition or animation, and no :hover or :active rule changes one (a focus ring is the floor, not a state); give the main controls a pressed state and a short transition (playbook gobanana-draft/motion-recipes)');
@@ -493,7 +495,7 @@ function summarize(report, src, langs, jsonPath) {
 	const defaultView = ![src, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u)));
 	const bodies = views.map((x) => x.measured.bodyPx).filter((n) => typeof n === 'number' && n > 0);
 	const languages = langs.length ? langs : [...new Set(views.map((x) => x.lang).filter(Boolean))];
-	const measure = defaultView && wide.length && bodies.length ? { fails, textElements: Math.max(0, ...wide.map((x) => x.measured.textElements)), bodyPx: Math.min(...bodies), languages } : null;
+	const measure = defaultView && wide.length ? { fails, textElements: Math.max(0, ...wide.map((x) => x.measured.textElements)), ...(bodies.length ? { bodyPx: Math.min(...bodies) } : {}), ...(views.some((x) => x.measured.runningText) ? {} : { noRunningText: true }), languages } : null;
 	const by = new Map(); for (const x of report) for (const f of x.findings) { const k = f.level + ' ' + f.id, e = by.get(k) || { level: f.level, id: f.id, msgs: new Map() }; e.msgs.set(f.msg, [...(e.msgs.get(f.msg) || []), x.run]); by.set(k, e); }
 	const findings = [...by.values()].sort((a, b) => (a.level === b.level ? 0 : a.level === 'FAIL' ? -1 : 1)).map((e) => ({ level: e.level, id: e.id, msgs: [...e.msgs].map(([msg, runs]) => ({ msg, runs })) }));
 	const summary = { tool: 'gb-measure', version: 3, target: src || urlFor, at: new Date().toISOString(), viewports: viewports.map(([w, h]) => `${w}x${h}`), languages, fails, warns: warnIds.length, failIds, warnIds, measure, parts: [...new Set(report.flatMap((x) => x.parts || []))],
@@ -529,12 +531,12 @@ await browser.close();
 const { findings, measure, fails } = summarize(report, target, languages, jsonPath);
 if (asJson) console.log(JSON.stringify(report, null, 1));
 else {
-	for (const x of report) { if (x.reduced || x.state) continue; const m = x.measured; console.log(`${x.run}: body ${m.bodyPx ?? 'n/a'}px, under 14px ${m.smallText}, text ${m.textElements}, sizes [${m.sizes}], largest ${m.largest}px, faces [${m.families}]`); }
+	for (const x of report) { if (x.reduced || x.state) continue; const m = x.measured; console.log(`${x.run}: body ${m.runningText ? `${m.bodyPx}px` : `none (no running text; labels ${m.labelPx ?? 'n/a'}px)`}, under 14px ${m.smallText}, text ${m.textElements}, sizes [${m.sizes}], largest ${m.largest}px, faces [${m.families}]`); }
 	for (const e of findings) console.log(`${e.level} ${e.id}: ${e.msgs.map(({ msg, runs: at }) => `${msg}  [${at.join(', ')}]`).join('; also ')}`);
 }
 const at = `${mainW}`;
 { const ps = [...new Set(report.flatMap((x) => x.parts || []))]; console.log(ps.length ? `Parts (data-part): ${ps.join(', ')}` : 'Parts (data-part): none; name each component, data-part="button|card|tabs|field|nav"'); }
-if (measure) console.log(`${fails} failing check(s), body ${measure.bodyPx}px, ${measure.textElements} text elements read at ${at}. Summary: ${jsonPath}`);
-else console.log(`${fails} failing check(s). No measure for add_to_canvas: ${![target, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u))) ? `no ${at} run found body text` : 'this run was a ?state or ?data view'}; measure the rendered default view (no ?state or ?data) for it. Summary: ${jsonPath}`);
+if (measure) console.log(`${fails} failing check(s), body ${measure.noRunningText ? 'none (labels and data only, no running text)' : `${measure.bodyPx}px`}, ${measure.textElements} text elements read at ${at}. Summary: ${jsonPath}`);
+else console.log(`${fails} failing check(s). No measure for add_to_canvas: ${![target, urlFor.ar, urlFor.en].filter(Boolean).some((u) => /[?&](state|data)=/.test(String(u))) ? `no ${at} run` : 'this run was a ?state or ?data view'}; measure the rendered default view (no ?state or ?data) for it. Summary: ${jsonPath}`);
 console.log(fails ? 'Open FAILs go in measure.openFails; nothing here blocks placing.' : 'Numbers are evidence for the craft check; they never replace looking side by side.');
 process.exit(0);

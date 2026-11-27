@@ -1,4 +1,4 @@
-// gb-tools v14: the fetch tag.
+// gb-tools v15: the fetch tag.
 // gb-fidelity: a draft against its hero, pixels and the DOM only, no AI; the hero and refs are read in memory
 import { guard } from './gb-guard.mjs';
 import { createRequire } from 'node:module'; import { execSync } from 'node:child_process'; import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -98,6 +98,43 @@ export function findBackdrop(img) {
 	if (o > (w * h - bw * bh) * 0.05) return null;
 	return { x: x0, y: y0, w: bw, h: bh };
 }
+// v15 (2026-11-27 runs): a page or a device shown over a backdrop that is not one flat colour (a gradient, a soft or blurred
+// scene). sharpMaps marks sharp changes on a copy at most 600 px; findPanel looks for four long straight edges inset on every
+// side around at least minArea of the image, the frame outside them almost free of sharp detail (over 3% sharp: no panel).
+// clean (1% or less): a backdrop trimChrome cuts; else only presentationHint names it.
+export const PANEL = { step: 14, clean: 0.01, busy: 0.03, minArea: 0.5, hintArea: 0.2, border: 0.05 };
+function sharpMaps(img) {
+	const k = Math.min(1, 600 / Math.max(img.w, img.h)), a = k < 1 ? resize(img, Math.max(1, Math.round(img.w * k)), Math.max(1, Math.round(img.h * k))) : img, { w, h } = a;
+	const step = (i, j) => Math.max(Math.abs(a.d[i] - a.d[j]), Math.abs(a.d[i + 1] - a.d[j + 1]), Math.abs(a.d[i + 2] - a.d[j + 2])) > PANEL.step;
+	const sx = new Uint8Array(w * h), sy = new Uint8Array(w * h); // a sharp change across x (a vertical edge), across y (a horizontal one)
+	for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { const o = y * w + x; sx[o] = step((o - 1) * 4, (o + 1) * 4) ? 1 : 0; sy[o] = step((o - w) * 4, (o + w) * 4) ? 1 : 0; }
+	return { k, w, h, sx, sy };
+}
+export function findPanel(img, minArea = PANEL.minArea) {
+	const { k, w, h, sx, sy } = sharpMaps(img);
+	const longest = (n, len, on) => Array.from({ length: n }, (_, i) => { let best = { n: 0, a: 0, b: 0 }, a0 = -1, last = -9; for (let j = 0; j < len; j++) if (on(i, j)) { if (a0 < 0 || j - last > 3) a0 = j; last = j; if (last - a0 + 1 > best.n) best = { n: last - a0 + 1, a: a0, b: last }; } return best; });
+	const col = longest(w, h, (x, y) => sx[y * w + x]), row = longest(h, w, (y, x) => sy[y * w + x]);
+	const pick = (rs, from, to, outer) => { let max = 0; for (let i = from; i <= to; i++) max = Math.max(max, rs[i].n); if (!max) return null; let at = null; for (let i = from; i <= to; i++) if (rs[i].n >= max * 0.8 && (at == null || (outer < 0 ? i < at : i > at))) at = i; return at; };
+	const L = pick(col, Math.max(1, Math.round(w * 0.015)), Math.round(w * 0.45), -1), R = pick(col, Math.round(w * 0.55), Math.min(w - 2, Math.round(w * 0.985)), 1);
+	const T = pick(row, Math.max(1, Math.round(h * 0.015)), Math.round(h * 0.45), -1), B = pick(row, Math.round(h * 0.55), Math.min(h - 2, Math.round(h * 0.985)), 1);
+	if ([L, R, T, B].some((v) => v == null)) return null;
+	const area = (R - L) * (B - T), cover = (r, lo, hi) => Math.min(r.b, hi) - Math.max(r.a, lo) >= (hi - lo) * 0.7;
+	if (area < w * h * minArea || area > w * h * 0.97 || !cover(col[L], T, B) || !cover(col[R], T, B) || !cover(row[T], L, R) || !cover(row[B], L, R)) return null;
+	let sharp = 0, all = 0; for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { if (x >= L - 2 && x <= R + 2 && y >= T - 2 && y <= B + 2) continue; all++; if (sx[y * w + x] || sy[y * w + x]) sharp++; }
+	if (!all || sharp > all * PANEL.busy) return null;
+	const q = (v) => Math.round(v / k);
+	return { x: q(L + 1), y: q(T + 1), w: q(R - L - 1), h: q(B - T - 1), clean: sharp <= all * PANEL.clean };
+}
+/** Why the image looks like a presentation (a page or device over a backdrop) when the trim cut nothing, or null. */
+export function presentationHint(img, n = 1) {
+	const p = findPanel(img, PANEL.hintArea), N = (v) => Math.round(v * n);
+	if (p) return `${p.clean ? 'a panel on a plain backdrop' : 'straight edges run around a panel or device'} at ${N(p.x)},${N(p.y)},${N(p.w)},${N(p.h)} px`;
+	const { k, w, h, sx, sy } = sharpMaps(img), on = (x, y) => sx[y * w + x] || sy[y * w + x];
+	const depth = (n, len, at) => { let d = 0; for (; d < n * 0.45; d++) { let c = 0; for (let j = 1; j < len - 1; j++) if (at(d, j)) c++; if (c > len * 0.005) break; } return d; };
+	const side = [depth(w, h, (d, j) => on(Math.max(1, d), j)), depth(w, h, (d, j) => on(Math.min(w - 2, w - 1 - d), j)), depth(h, w, (d, j) => on(j, Math.max(1, d))), depth(h, w, (d, j) => on(j, Math.min(h - 2, h - 1 - d)))];
+	if (side[0] >= w * PANEL.border && side[1] >= w * PANEL.border && side[2] >= h * PANEL.border && side[3] >= h * PANEL.border) return `a wide plain border (${side.map((v) => N(v / k)).join(', ')} px left, right, top, bottom)`;
+	return null;
+}
 export function findCreditBar(img) {
 	const { w, h } = img, tall = h > w * 1.6, m = Math.max(2, Math.round(w * 0.02));
 	for (const side of ['bottom']) {
@@ -178,6 +215,12 @@ export function trimChrome(img, k = 1) {
 		const s = [b.x, img.w - b.x - b.w, b.y, img.h - b.y - b.h].map((v) => Math.round(v * k));
 		cut.push(Math.max(...s) - Math.min(...s) <= 2 ? `backdrop ${s[0]}px each side` : `backdrop ${s[0]}px left, ${s[1]}px right, ${s[2]}px top, ${s[3]}px bottom`); box = b;
 	}
+	const p = b ? null : findPanel(img);
+	if (p?.clean) {
+		const s = [p.x, img.w - p.x - p.w, p.y, img.h - p.y - p.h].map((v) => Math.round(v * k)), d = findScreen(crop(img, p.x, p.y, p.w, p.h));
+		cut.push(`backdrop ${s[0]}px left, ${s[1]}px right, ${s[2]}px top, ${s[3]}px bottom (not one flat colour)`); box = { x: p.x, y: p.y, w: p.w, h: p.h };
+		if (d) { cut.push(`device bezel ${P(d.x)} left, ${P(p.w - d.x - d.w)} right, ${P(d.y)} top, ${P(p.h - d.y - d.h)} bottom`); box = { x: p.x + d.x, y: p.y + d.y, w: d.w, h: d.h }; }
+	}
 	const at = () => (box.x || box.y || box.w !== img.w || box.h !== img.h ? crop(img, box.x, box.y, box.w, box.h) : img);
 	const f = findRecordingFrame(at());
 	if (f) { cut.push(`recording frame ${Object.entries(f.cut).filter(([, v]) => v).map(([s, v]) => `${P(v)} ${s}`).join(', ')}`); box = { x: box.x + f.box.x, y: box.y + f.box.y, w: f.box.w, h: f.box.h }; }
@@ -186,13 +229,37 @@ export function trimChrome(img, k = 1) {
 	return { box: cut.length ? box : null, cut };
 }
 
+export const PHOTO = { hf: 0.006, restL: 0.015, restAB: 0.0025 };
+/** What a plane (a flat fill or a smooth gradient) leaves unexplained in a k by k grid of means: 0 for either. */
+export function planeRest(g, k = 4) {
+	const c = (k - 1) / 2, sxx = k * [...Array(k).keys()].reduce((s, i) => s + (i - c) ** 2, 0), m = g.reduce((s, v) => s + v, 0) / g.length; let gx = 0, gy = 0;
+	for (let i = 0; i < g.length; i++) { gx += g[i] * ((i % k) - c); gy += g[i] * (Math.floor(i / k) - c); }
+	gx /= sxx; gy /= sxx; let r = 0; for (let i = 0; i < g.length; i++) r += (g[i] - m - gx * ((i % k) - c) - gy * (Math.floor(i / k) - c)) ** 2;
+	return Math.sqrt(r / g.length);
+}
+// v15: a block is photo only with photographic texture: many colours (bins), pixel to pixel change (hf), and light or colour
+// structure a plane cannot explain: light inside the block (4 by 4 means), or light or colour across its 3 by 3 neighbours
+// (block means). A flat fill, its JPEG noise, grain or dither, and a smooth gradient are no photo (the 2026-11-27 orange
+// slab read 0.53 photo).
 export function photoMask(img, lab) {
-	const bs = Math.max(8, Math.round(Math.max(img.w, img.h) / 50)), cw = Math.floor(img.w / bs), ch = Math.floor(img.h / bs), m = new Uint8Array(cw * ch);
+	const bs = Math.max(8, Math.round(Math.max(img.w, img.h) / 50)), cw = Math.floor(img.w / bs), ch = Math.floor(img.h / bs), m = new Uint8Array(cw * ch), q = bs / 4;
+	const cand = new Uint8Array(cw * ch), inner = new Float32Array(cw * ch), mean = [0, 1, 2].map(() => new Float32Array(cw * ch));
 	for (let by = 0; by < ch; by++) for (let bx = 0; bx < cw; bx++) {
-		const bins = new Map(); let n = 0;
-		for (let y = by * bs; y < (by + 1) * bs; y++) for (let x = bx * bs; x < (bx + 1) * bs; x++) { const i = y * img.w + x, k = Math.floor(lab.L[i] / 0.04) * 4096 + (Math.floor(lab.A[i] / 0.02) + 32) * 64 + Math.floor(lab.B[i] / 0.02) + 32; bins.set(k, (bins.get(k) || 0) + 1); n++; }
-		const v = [...bins.values()].sort((p, q) => q - p);
-		if (v.filter((c) => c >= n * 0.04).length >= 3 && (v[0] + (v[1] || 0)) / n < 0.6) m[by * cw + bx] = 1;
+		const bins = new Map(), sub = [0, 1, 2].map(() => new Float64Array(16)), o = by * cw + bx; let n = 0, hf = 0, hn = 0;
+		for (let y = by * bs; y < (by + 1) * bs; y++) for (let x = bx * bs; x < (bx + 1) * bs; x++) {
+			const i = y * img.w + x, L = lab.L[i], k = Math.floor(L / 0.04) * 4096 + (Math.floor(lab.A[i] / 0.02) + 32) * 64 + Math.floor(lab.B[i] / 0.02) + 32; bins.set(k, (bins.get(k) || 0) + 1); n++;
+			const c = Math.min(3, Math.floor((y - by * bs) / q)) * 4 + Math.min(3, Math.floor((x - bx * bs) / q)); sub[0][c] += L; sub[1][c] += lab.A[i]; sub[2][c] += lab.B[i];
+			if (x > bx * bs) { hf += Math.abs(L - lab.L[i - 1]); hn++; } if (y > by * bs) { hf += Math.abs(L - lab.L[i - img.w]); hn++; } }
+		const v = [...bins.values()].sort((p, r) => r - p), r = planeRest(sub[0].map((t) => t * 16 / n));
+		for (let j = 0; j < 3; j++) mean[j][o] = sub[j].reduce((s, t) => s + t, 0) / n;
+		inner[o] = r / PHOTO.restL; // colour inside a block is too close to chroma noise; colour counts across blocks
+		cand[o] = v.filter((c) => c >= n * 0.04).length >= 3 && (v[0] + (v[1] || 0)) / n < 0.6 && hf / (hn || 1) >= PHOTO.hf ? 1 : 0;
+	}
+	for (let by = 0; by < ch; by++) for (let bx = 0; bx < cw; bx++) {
+		const o = by * cw + bx; if (!cand[o]) continue; let rest = inner[o];
+		if (rest < 1) { const nb = (j) => { const g = []; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) g.push(mean[j][Math.min(ch - 1, Math.max(0, by + dy)) * cw + Math.min(cw - 1, Math.max(0, bx + dx))]); return planeRest(g, 3); };
+			rest = Math.max(nb(0) / PHOTO.restL, nb(1) / PHOTO.restAB, nb(2) / PHOTO.restAB); }
+		if (rest >= 1) m[o] = 1;
 	}
 	const near = (g, x, y) => { let c = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if ((dx || dy) && X >= 0 && Y >= 0 && X < cw && Y < ch && g[Y * cw + X]) c++; } return c; };
 	const step = (g, keep) => { const o = new Uint8Array(cw * ch); for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) o[y * cw + x] = keep(g[y * cw + x], near(g, x, y)) ? 1 : 0; return o; };
@@ -552,6 +619,8 @@ async function main() {
 	const heroNat = heroImg.nw / heroImg.w;
 	let trimmed = noTrim ? 'off (--no-trim)' : cropWhy === cf ? `the ${cf} box` : cropWhy.startsWith('device') ? 'device bezel (cut to the screen)' : cropArg === 'none' ? `nothing (${cf} none)` : 'nothing (no credit bar or backdrop found)', trim = [];
 	if (!noTrim && !heroCrop && cropArg !== 'none') { const t = trimChrome(heroImg, heroNat); if (t.box) { heroCrop = t.box; trim = t.cut; trimmed = t.cut.join('; '); cropWhy = `trimmed ${trimmed}`; } }
+	const shown = !noTrim && !heroCrop && cropArg !== 'none' ? presentationHint(heroImg, heroNat) : null;
+	const presLine = shown ? `presentation: the ${part ? 'ref' : 'hero'} looks like a page or phone shown over a backdrop (${shown}) and the trim cut nothing, so the backdrop is scored as the page. Run again with ${cf} x,y,w,h --ref-size <imageW>x<imageH> from the reference's screen box (search_references or get_snapshot: screen { x, y, w, h, imageW, imageH }); copy only what is inside it.` : null;
 	if (heroCrop) heroImg = crop(heroImg, heroCrop.x, heroCrop.y, heroCrop.w, heroCrop.h);
 	mkdirSync(out, { recursive: true }); const natBox = heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([q, v]) => [q, Math.round(v * heroNat)])) : null, trimmedFile = join(out, part ? 'ref-trimmed.png' : 'hero-trimmed.png');
 	writeFileSync(trimmedFile, Buffer.from(await blank.evaluate(CROPPNG, { src: heroSrc, box: natBox }), 'base64'));
@@ -602,10 +671,11 @@ async function main() {
 		await browser.close();
 		const cd = color ? colorDelta(hImg, dImg) : null;
 		const now = { pixel, structure: meanStructure(regions), structureMin: minStructure(regions), done: done.startsWith(P + 'Done'), shot }, runs = (prev?.runs || 0) + 1;
-		const rec = { v: 1, tool: 'gb-fidelity', mode: part ? 'part' : 'diff', ...(part ? { part, sel: selArg, ref: hero, box, noRefBand: Math.round(band / f) } : { hero }), ...now, run: runs, size: [W, H], viewport: `${vw}x${vh}`, dpr, heroScale: hs, cssPerHeroPx, tolerance: DIFF_TOL, weights: DIFF, pixelMatch: match, regions, notScored: skipped.map((r) => ({ name: r.name, kind: r.skip })), limits: { ...DONE, maxNotScored: MAX_SKIP }, trimmed: trim, cursors, warns: warns.map((w) => w.split(':')[0].slice(5)), crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([q, v]) => [q, Math.round(v)])) : null, ...(cd ? { colorDelta: cd } : {}), ms: Date.now() - t0 };
+		const rec = { v: 1, tool: 'gb-fidelity', mode: part ? 'part' : 'diff', ...(part ? { part, sel: selArg, ref: hero, box, noRefBand: Math.round(band / f) } : { hero }), ...now, run: runs, size: [W, H], viewport: `${vw}x${vh}`, dpr, heroScale: hs, cssPerHeroPx, tolerance: DIFF_TOL, weights: DIFF, pixelMatch: match, regions, notScored: skipped.map((r) => ({ name: r.name, kind: r.skip })), limits: { ...DONE, maxNotScored: MAX_SKIP }, trimmed: trim, presentation: shown, cursors, warns: warns.map((w) => w.split(':')[0].slice(5)), crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([q, v]) => [q, Math.round(v)])) : null, ...(cd ? { colorDelta: cd } : {}), ms: Date.now() - t0 };
 		const best = part && prev && (prev.done !== now.done ? prev.done : prev.structure > now.structure) ? prev : rec;
 		writeFileSync(jf, JSON.stringify({ ...best, runs, last: { run: runs, ...now } }, null, 1));
 		console.log(trimLine);
+		if (presLine) console.log(presLine);
 		if (part) console.log(`${P}the ${heroImg.w}x${heroImg.h} px ref at the width of ${selArg} (${box.w}x${box.h} CSS px) is ${Math.round(heroImg.h * cw / heroImg.w)} CSS px tall; 1 ref px is ${cssPerHeroPx} CSS px.${band ? ` no-ref band: ${Math.round(band / f)}px at the bottom (not scored)` : ''}`);
 		else console.log(`Hero scale: the ${heroImg.w}x${heroImg.h} px hero is shown ${hs}x, at the ${vw} px viewport width${dpr !== 1 ? ` (${dpr}x pixels)` : ''}: 1 hero px is ${cssPerHeroPx} CSS px. Build at ${vw}x${vh}.`);
 		console.log(`Pixel match: ${pixel}%${skipped.length ? ` over scored regions (${match}% all)` : ''}`);
@@ -635,7 +705,7 @@ async function main() {
 	const ts = heroTypeArg ?? tokens?.craft?.spec?.typeScale ?? tokens?.typeScale, heroType = typeRatio(ts), draftType = dom?.typeRatio ?? null, pixel = scoredMatch(regionMatch(resize(heroImg, draftImg.w, draftImg.h), draftImg));
 	const fd = features(draftImg, shape), fh = features(heroImg, shape), { scores, far, raw } = compare(fd, fh, { draftType, heroType, pixel });
 	const detail = { draft: { imageShare: r2(fd.photo), domImageShare: dom ? r2(dom.imageShare) : null, typeRatio: r2(draftType), bodyPx: dom?.bodyPx ?? null, largestPx: dom?.largestPx ?? null, ink: r2(fd.ink * 1000), textPer100k: dom?.textPer100k ?? null, ground: fd.palette[0] ? hexOf(fd.palette[0].lab) : null },
-		hero: { imageShare: r2(fh.photo), typeRatio: r2(heroType), typeFrom: heroType ? (heroTypeArg ? '--hero-type' : tokens?.craft?.spec?.typeScale ? 'tokens craft.spec.typeScale' : 'tokens typeScale') : null, ink: r2(fh.ink * 1000), ground: fh.palette[0] ? hexOf(fh.palette[0].lab) : null, size: [heroImg.w, heroImg.h], crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([k, v]) => [k, Math.round(v * heroNat)])) : null, cut: heroCut, cropWhy, trimmed: trim } };
+		hero: { imageShare: r2(fh.photo), typeRatio: r2(heroType), typeFrom: heroType ? (heroTypeArg ? '--hero-type' : tokens?.craft?.spec?.typeScale ? 'tokens craft.spec.typeScale' : 'tokens typeScale') : null, ink: r2(fh.ink * 1000), ground: fh.palette[0] ? hexOf(fh.palette[0].lab) : null, size: [heroImg.w, heroImg.h], crop: heroCrop ? Object.fromEntries(Object.entries(heroCrop).map(([k, v]) => [k, Math.round(v * heroNat)])) : null, cut: heroCut, cropWhy, trimmed: trim, presentation: shown } };
 	const pairs = [];
 	for (const r of refs) {
 		const row = { part: r.part, url: r.url, selector: r.selector || null };
@@ -667,6 +737,7 @@ async function main() {
 	if (asJson) console.log(JSON.stringify(summary, null, 1));
 	else {
 		console.log(trimLine);
+		if (presLine) console.log(presLine);
 		console.log(`Draft first screen at ${vp[0]}x${vp[1]} against the hero (${cropWhy}):`);
 		for (const l of lines) console.log(l);
 		if (cd) for (const l of colorLines(cd)) console.log(l);

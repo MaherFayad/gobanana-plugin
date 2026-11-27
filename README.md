@@ -1,6 +1,6 @@
 # GoBanana plugin
 
-The GoBanana plugin for Claude Code and claude.ai (version 0.9.9), and a starter project to build a page in. This repo is written by a release script; changes made here are replaced on the next release.
+The GoBanana plugin for Claude Code and claude.ai (version 0.9.10), and a starter project to build a page in. This repo is written by a release script; changes made here are replaced on the next release.
 
 ## Install the plugin
 
